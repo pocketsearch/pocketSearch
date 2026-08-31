@@ -1,0 +1,158 @@
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
+import type { Config } from '../core/config.js';
+import { crawl } from '../core/crawler.js';
+import type { PersistentEngine } from '../core/store.js';
+import {
+  bulkInputSchema,
+  crawlInputSchema,
+  documentInputSchema,
+  searchQuerySchema,
+} from '../core/types.js';
+
+export interface RouteContext {
+  config: Config;
+  engine: PersistentEngine;
+}
+
+class HttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export function registerErrorHandler(app: FastifyInstance): void {
+  app.setErrorHandler((error: unknown, request, reply) => {
+    if (error instanceof z.ZodError) {
+      reply.status(400).send({
+        error: 'validation_error',
+        message: 'Request did not match the expected schema.',
+        issues: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+      });
+      return;
+    }
+    if (error instanceof HttpError) {
+      reply.status(error.statusCode).send({ error: 'request_error', message: error.message });
+      return;
+    }
+    const err = error as { statusCode?: number; message?: string; validation?: unknown };
+    if (err.validation || (typeof err.statusCode === 'number' && err.statusCode < 500)) {
+      reply.status(err.statusCode ?? 400).send({
+        error: 'request_error',
+        message: err.message ?? 'Bad request',
+      });
+      return;
+    }
+    request.log.error({ err: error }, 'unhandled error');
+    reply.status(500).send({ error: 'internal_error', message: 'Something went wrong.' });
+  });
+}
+
+export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
+  return async (app) => {
+    const { engine, config } = ctx;
+
+    app.get('/health', async () => ({
+      status: 'ok',
+      documents: engine.size,
+      uptimeSeconds: Math.round(process.uptime()),
+    }));
+
+    app.get('/stats', async () => engine.stats(config.indexFile));
+
+    app.get('/search', async (request) => {
+      const query = searchQuerySchema.parse(request.query);
+      return engine.search(query);
+    });
+
+    app.get('/documents', async (request) => {
+      const { limit, offset } = z
+        .object({
+          limit: z.coerce.number().int().min(1).max(200).default(50),
+          offset: z.coerce.number().int().min(0).default(0),
+        })
+        .parse(request.query);
+      const all = engine.list();
+      return {
+        total: all.length,
+        limit,
+        offset,
+        documents: all.slice(offset, offset + limit),
+      };
+    });
+
+    app.get('/documents/:id', async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      const doc = engine.get(id);
+      if (!doc) throw new HttpError(404, `No document with id "${id}"`);
+      return doc;
+    });
+
+    app.post('/documents', async (request, reply) => {
+      const input = documentInputSchema.parse(request.body);
+      const created = !input.id || !engine.has(input.id);
+      const doc = engine.upsert(input);
+      reply.status(created ? 201 : 200);
+      return doc;
+    });
+
+    app.put('/documents/:id', async (request) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      const input = documentInputSchema.parse({ ...(request.body as object), id });
+      return engine.upsert(input);
+    });
+
+    app.delete('/documents/:id', async (request, reply) => {
+      const { id } = z.object({ id: z.string().min(1) }).parse(request.params);
+      if (!engine.remove(id)) throw new HttpError(404, `No document with id "${id}"`);
+      reply.status(204);
+      return null;
+    });
+
+    app.post('/documents/bulk', async (request, reply) => {
+      const { documents } = bulkInputSchema.parse(request.body);
+      const stored = documents.map((doc) => engine.upsert(doc));
+      reply.status(201);
+      return { indexed: stored.length, ids: stored.map((d) => d.id) };
+    });
+
+    app.post('/index/clear', async () => {
+      engine.clear();
+      return { ok: true, documents: engine.size };
+    });
+
+    app.post('/crawl', async (request) => {
+      const input = crawlInputSchema.parse(request.body);
+      const result = await crawl(
+        {
+          url: input.url,
+          maxPages: input.maxPages ?? config.crawlMaxPages,
+          sameOriginOnly: input.sameOriginOnly,
+          tags: input.tags,
+          userAgent: config.crawlUserAgent,
+          timeoutMs: config.crawlTimeoutMs,
+          delayMs: config.crawlDelayMs,
+          concurrency: config.crawlConcurrency,
+          allowPrivateHosts: config.crawlAllowPrivateHosts,
+        },
+        {
+          logger: app.log,
+          onPage: (page) => {
+            engine.upsert(page);
+          },
+        },
+      );
+      await engine.flush();
+      return {
+        startUrl: result.startUrl,
+        pagesCrawled: result.pagesCrawled,
+        documentsIndexed: result.pages.length,
+        errors: result.errors,
+        skipped: result.skipped,
+      };
+    });
+  };
+};

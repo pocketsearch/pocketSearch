@@ -1,0 +1,28 @@
+{
+  "documents": [
+    {
+      "id": "beacon-intro",
+      "title": "What is Beacon Search?",
+      "body": "Beacon Search is a small, self-hostable full-text search engine. It keeps an in-memory index and persists it to a single JSON file, so there is no database to run. Point it at your docs, a website, or a JSON export and get an instant search API plus a web UI.",
+      "url": "https://example.com/docs/intro",
+      "tags": ["docs", "overview"],
+      "source": "handbook"
+    },
+    {
+      "id": "beacon-cli",
+      "title": "Using the Beacon CLI",
+      "body": "The beacon command lets you add documents, import JSON, crawl websites, run searches and inspect index stats without starting the server. Every command reads the same index file the server uses.",
+      "url": "https://example.com/docs/cli",
+      "tags": ["docs", "cli"],
+      "source": "handbook"
+    },
+    {
+      "id": "beacon-deploy",
+      "title": "Deploying with Docker",
+      "body": "A multi-stage Dockerfile builds the server and web UI, then ships a minimal runtime image. Mount a volume at /data to keep your index across restarts. The image runs as a non-root user and exposes a health check.",
+      "url": "https://example.com/docs/deploy",
+      "tags": ["docs", "deployment", "docker"],
+      "source": "handbook"
+    }
+  ]
+}

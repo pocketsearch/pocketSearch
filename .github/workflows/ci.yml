@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['20.x', '22.x']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Smoke-test the built server
+        run: |
+          node dist/server/index.js &
+          SERVER_PID=$!
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:7700/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:7700/api/health
+          curl -sf -X POST http://127.0.0.1:7700/api/documents \
+            -H 'content-type: application/json' \
+            -d '{"title":"CI smoke","body":"hello world","tags":["ci"]}'
+          curl -sf 'http://127.0.0.1:7700/api/search?q=hello' | grep -q '"total":1'
+          kill $SERVER_PID
+        env:
+          BEACON_DATA_DIR: ${{ runner.temp }}/beacon-data
+          BEACON_LOG_LEVEL: warn
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t abeaconsearch:ci .
+      - name: Run container smoke test
+        run: |
+          docker run -d --name beacon -p 7700:7700 abeaconsearch:ci
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:7700/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:7700/api/health
+          docker rm -f beacon

@@ -1,0 +1,15 @@
+services:
+  beacon:
+    build: .
+    image: abeaconsearch:latest
+    ports:
+      - '7700:7700'
+    environment:
+      BEACON_LOG_LEVEL: info
+      BEACON_CRAWL_MAX_PAGES: '100'
+    volumes:
+      - beacon-data:/data
+    restart: unless-stopped
+
+volumes:
+  beacon-data:
