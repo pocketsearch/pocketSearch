@@ -14,6 +14,41 @@ function useDebounced<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
+/** ASCII-style radial dot burst — the "beacon". Pure SVG, inherits color. */
+function Beacon({ size = 200 }: { size?: number }): JSX.Element {
+  const c = size / 2;
+  const maxR = c - size * 0.03;
+  const step = size * 0.056;
+  const dots: JSX.Element[] = [];
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2;
+    const reach = i % 4 === 0 ? maxR : maxR * 0.6;
+    for (let r = size * 0.06; r <= reach + 0.01; r += step) {
+      dots.push(
+        <circle
+          key={`${i}-${r.toFixed(1)}`}
+          cx={c + Math.cos(angle) * r}
+          cy={c + Math.sin(angle) * r}
+          r={r < maxR * 0.32 ? size * 0.013 : size * 0.009}
+        />,
+      );
+    }
+  }
+  return (
+    <svg
+      className="beacon"
+      viewBox={`0 0 ${size} ${size}`}
+      width={size}
+      height={size}
+      role="img"
+      aria-label="Beacon"
+    >
+      {dots}
+      <circle cx={c} cy={c} r={size * 0.02} />
+    </svg>
+  );
+}
+
 export function App(): JSX.Element {
   const [tab, setTab] = useState<Tab>('search');
   const [stats, setStats] = useState<IndexStats | null>(null);
@@ -31,13 +66,9 @@ export function App(): JSX.Element {
     <div className="app">
       <header className="app__header">
         <div className="brand">
-          <span className="brand__mark" aria-hidden>
-            🔦
-          </span>
-          <div>
-            <h1>Beacon Search</h1>
-            <p>Self-hostable open-source full-text search</p>
-          </div>
+          <Beacon size={40} />
+          <h1>ABEACON</h1>
+          <p>self-hostable full-text search</p>
         </div>
         <nav className="tabs" aria-label="Sections">
           {(
@@ -141,14 +172,10 @@ function SearchView(): JSX.Element {
   return (
     <section className="search">
       <div className="search__box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" strokeLinecap="round" />
-        </svg>
         <input
           type="search"
           autoFocus
-          placeholder="Search the index…"
+          placeholder="search the index"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           aria-label="Search query"
@@ -160,7 +187,7 @@ function SearchView(): JSX.Element {
             onClick={() => setInput('')}
             aria-label="Clear search"
           >
-            ✕
+            clear
           </button>
         )}
       </div>
@@ -244,14 +271,15 @@ function SearchView(): JSX.Element {
 
       {result && result.total === 0 && !loading && (
         <div className="empty">
-          <span className="empty__icon" aria-hidden>
-            {query ? '🔍' : '🔦'}
-          </span>
-          <strong>{query ? 'No documents matched' : 'Your index is ready'}</strong>
+          <Beacon size={150} />
+          <strong>{query ? 'no documents matched' : 'index ready'}</strong>
           <span>
             {query
-              ? 'Try a different query, or loosen the active tag filters.'
-              : 'Start typing to search, or use Add document / Crawl site to fill the index.'}
+              ? 'Try a different query, or clear the active tag filters.'
+              : 'Type to search, or use Add / Crawl to fill the index.'}
+          </span>
+          <span className="empty__dots" aria-hidden>
+            . . . . . . .
           </span>
         </div>
       )}
@@ -425,11 +453,11 @@ function CrawlView({ onDone }: { onDone: () => void }): JSX.Element {
 }
 
 const STATUS_ICON: Record<string, string> = {
-  pass: '✔',
-  warn: '▲',
-  fail: '✘',
-  info: 'ℹ',
-  skipped: '·',
+  pass: '[ ok ]',
+  warn: '[warn]',
+  fail: '[fail]',
+  info: '[info]',
+  skipped: '[skip]',
 };
 
 function PlateView({ onDone }: { onDone: () => void }): JSX.Element {
@@ -547,7 +575,7 @@ function PlateView({ onDone }: { onDone: () => void }): JSX.Element {
             {report.checks.map((check) => (
               <li key={check.id} className={`checks__item checks__item--${check.status}`}>
                 <span className="checks__icon" aria-hidden>
-                  {STATUS_ICON[check.status] ?? '•'}
+                  {STATUS_ICON[check.status] ?? '[ -- ]'}
                 </span>
                 <span className="checks__label">{check.label}</span>
                 <span className="checks__detail">{check.detail}</span>
