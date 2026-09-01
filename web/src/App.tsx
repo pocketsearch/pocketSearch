@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type IndexStats, type SearchResponse } from './api';
+import { api, type IndexStats, type PlateCheck, type SearchResponse } from './api';
 
-type Tab = 'search' | 'add' | 'crawl' | 'about';
+type Tab = 'search' | 'plate' | 'add' | 'crawl' | 'about';
 
 const PAGE_SIZE = 10;
 
@@ -43,6 +43,7 @@ export function App(): JSX.Element {
           {(
             [
               ['search', 'Search'],
+              ['plate', 'Plate check'],
               ['add', 'Add document'],
               ['crawl', 'Crawl site'],
               ['about', 'About'],
@@ -62,6 +63,7 @@ export function App(): JSX.Element {
 
       <main className="app__main">
         {tab === 'search' && <SearchView />}
+        {tab === 'plate' && <PlateView onDone={refreshStats} />}
         {tab === 'add' && <AddView onDone={refreshStats} />}
         {tab === 'crawl' && <CrawlView onDone={refreshStats} />}
         {tab === 'about' && <AboutView />}
@@ -393,6 +395,164 @@ function CrawlView({ onDone }: { onDone: () => void }): JSX.Element {
   );
 }
 
+const STATUS_ICON: Record<string, string> = {
+  pass: '✔',
+  warn: '▲',
+  fail: '✘',
+  info: 'ℹ',
+  skipped: '·',
+};
+
+function PlateView({ onDone }: { onDone: () => void }): JSX.Element {
+  const [input, setInput] = useState('');
+  const [vehicle, setVehicle] = useState(true);
+  const [mot, setMot] = useState(true);
+  const [index, setIndex] = useState(false);
+  const [report, setReport] = useState<PlateCheck | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    api
+      .checkPlate({ plate: input.trim(), vehicle, mot, index })
+      .then((res) => {
+        setReport(res);
+        if (index) onDone();
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Check failed'))
+      .finally(() => setBusy(false));
+  };
+
+  const badgeClass =
+    report?.summary.status === 'ok'
+      ? 'badge badge--ok'
+      : report?.summary.status === 'attention'
+        ? 'badge badge--warn'
+        : 'badge badge--fail';
+
+  return (
+    <section className="plate">
+      <form className="plate__form" onSubmit={submit}>
+        <input
+          className="plate__input"
+          value={input}
+          onChange={(e) => setInput(e.target.value.toUpperCase())}
+          placeholder="AB12 CDE"
+          aria-label="Registration mark"
+          maxLength={16}
+          autoFocus
+        />
+        <button type="submit" className="btn" disabled={busy || input.trim() === ''}>
+          {busy ? 'Checking…' : 'Run checks'}
+        </button>
+      </form>
+      <div className="plate__opts">
+        <label>
+          <input type="checkbox" checked={vehicle} onChange={(e) => setVehicle(e.target.checked)} />{' '}
+          DVLA vehicle data
+        </label>
+        <label>
+          <input type="checkbox" checked={mot} onChange={(e) => setMot(e.target.checked)} /> MOT
+          history
+        </label>
+        <label>
+          <input type="checkbox" checked={index} onChange={(e) => setIndex(e.target.checked)} />{' '}
+          Save to index
+        </label>
+      </div>
+
+      {error && <p className="notice notice--error">{error}</p>}
+
+      {report && (
+        <div className="plate__report">
+          <div className="plate__headline">
+            <span className={badgeClass}>{report.summary.status}</span>
+            <div>
+              <strong className="plate__mark">{report.formatted}</strong>
+              <span className="plate__desc">{report.summary.headline}</span>
+            </div>
+          </div>
+
+          <dl className="plate__facts">
+            <div>
+              <dt>Format</dt>
+              <dd>{report.format}</dd>
+            </div>
+            {report.age && (
+              <div>
+                <dt>Age</dt>
+                <dd>
+                  {report.age.description} (~{report.age.ageYears} yrs)
+                </dd>
+              </div>
+            )}
+            {report.region && (
+              <div>
+                <dt>Region</dt>
+                <dd>
+                  {report.region.office}, {report.region.region} ({report.region.country})
+                </dd>
+              </div>
+            )}
+            {report.vehicle && (
+              <div>
+                <dt>Vehicle</dt>
+                <dd>
+                  {[
+                    report.vehicle.colour,
+                    report.vehicle.make,
+                    report.vehicle.fuelType,
+                    report.vehicle.yearOfManufacture,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </dd>
+              </div>
+            )}
+          </dl>
+
+          <ul className="checks">
+            {report.checks.map((check) => (
+              <li key={check.id} className={`checks__item checks__item--${check.status}`}>
+                <span className="checks__icon" aria-hidden>
+                  {STATUS_ICON[check.status] ?? '•'}
+                </span>
+                <span className="checks__label">{check.label}</span>
+                <span className="checks__detail">{check.detail}</span>
+              </li>
+            ))}
+          </ul>
+
+          {report.mot && report.mot.tests.length > 0 && (
+            <details className="plate__mot">
+              <summary>
+                MOT history — {report.mot.totalTests} tests ({report.mot.passed} passed,{' '}
+                {report.mot.failed} failed)
+              </summary>
+              <ul>
+                {report.mot.tests.slice(0, 12).map((test, i) => (
+                  <li key={test.motTestNumber ?? i}>
+                    {test.completedDate?.slice(0, 10)} — <strong>{test.testResult}</strong>
+                    {typeof test.odometerValue === 'number'
+                      ? ` · ${test.odometerValue.toLocaleString()} ${test.odometerUnit ?? ''}`
+                      : ''}
+                    {test.defects.length > 0 ? ` · ${test.defects.length} defect(s)` : ''}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          <p className="plate__sources">Sources: {report.sources.join(', ')}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function AboutView(): JSX.Element {
   return (
     <section className="prose">
@@ -418,12 +578,21 @@ function AboutView(): JSX.Element {
           <code>POST /api/documents/bulk</code> · <code>POST /api/crawl</code> ·{' '}
           <code>GET /api/stats</code>
         </li>
+        <li>
+          <code>GET /api/plate/:reg</code> · <code>POST /api/plate/check</code>
+        </li>
       </ul>
-      <h3>CLI</h3>
+      <h3>Number plate checker</h3>
       <p>
-        <code>beacon serve</code>, <code>beacon add</code>, <code>beacon import file.json</code>,{' '}
-        <code>beacon crawl https://…</code>, <code>beacon search &quot;query&quot;</code>,{' '}
-        <code>beacon stats</code>
+        The <em>Plate check</em> tab runs automatic checks on a UK registration: format validation,
+        age identifier, DVLA region, and — when API keys are configured — DVLA tax/MOT status and
+        DVSA MOT history. Offline checks need no credentials.
+      </p>
+      <h3>CLI &amp; MCP</h3>
+      <p>
+        <code>beacon serve|add|import|crawl|search|stats</code>,{' '}
+        <code>beacon plate &quot;AB12 CDE&quot;</code>. An MCP server (<code>beacon-mcp</code>)
+        exposes the plate checker and the search index as tools for Claude and other MCP clients.
       </p>
     </section>
   );

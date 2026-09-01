@@ -1,0 +1,383 @@
+import { decodeAge } from './age.js';
+import { classifyPlate, formatPlate, normalizePlate } from './format.js';
+import { lookupMemoryTag } from './regions.js';
+import type { MotProvider, VehicleProvider } from './providers/types.js';
+import type {
+  CheckItem,
+  CheckStatus,
+  PlateCheck,
+  PlateCheckOptions,
+  VehicleRecord,
+} from './types.js';
+
+export interface PlateCheckerDeps {
+  vehicleProvider?: VehicleProvider;
+  motProvider?: MotProvider;
+  now?: () => Date;
+}
+
+function daysUntil(iso: string | undefined, ref: Date): number | null {
+  if (!iso) return null;
+  const target = new Date(iso).getTime();
+  if (Number.isNaN(target)) return null;
+  return Math.round((target - ref.getTime()) / 864e5);
+}
+
+export class PlateChecker {
+  private readonly vehicleProvider?: VehicleProvider;
+  private readonly motProvider?: MotProvider;
+  private readonly now: () => Date;
+
+  constructor(deps: PlateCheckerDeps = {}) {
+    this.vehicleProvider = deps.vehicleProvider;
+    this.motProvider = deps.motProvider;
+    this.now = deps.now ?? (() => new Date());
+  }
+
+  get capabilities(): { vehicleData: boolean; motHistory: boolean } {
+    return {
+      vehicleData: Boolean(this.vehicleProvider?.configured),
+      motHistory: Boolean(this.motProvider?.configured),
+    };
+  }
+
+  async check(input: string, options: PlateCheckOptions = {}): Promise<PlateCheck> {
+    const reference = options.referenceDate ? new Date(options.referenceDate) : this.now();
+    const normalized = normalizePlate(input);
+    const classification = classifyPlate(normalized);
+    const formatted = formatPlate(normalized, classification.format);
+    const checks: CheckItem[] = [];
+    const sources = new Set<string>(['offline plate analysis']);
+
+    // 1. Format --------------------------------------------------------------
+    checks.push({
+      id: 'format',
+      label: 'Registration format',
+      status: classification.valid ? 'pass' : 'fail',
+      detail: classification.valid
+        ? `Matches the UK ${classification.format} plate format`
+        : (classification.reason ?? 'Not a recognised UK registration mark'),
+      data: { format: classification.format },
+    });
+
+    checks.push({
+      id: 'characters',
+      label: 'Character set',
+      status: /^[A-Z0-9]{1,8}$/.test(normalized) && normalized.length >= 2 ? 'pass' : 'fail',
+      detail:
+        normalized.length === 0
+          ? 'No registration characters supplied'
+          : `${normalized.length} characters after normalisation`,
+    });
+
+    // 2. Age ---------------------------------------------------------------
+    const age = decodeAge(normalized, classification.format, reference);
+    if (classification.format === 'current') {
+      if (age) {
+        checks.push({
+          id: 'age',
+          label: 'Age identifier',
+          status: 'pass',
+          detail: `"${age.identifier}" → ${age.description} (about ${age.ageYears} years old)`,
+          data: { ...age },
+        });
+      } else {
+        checks.push({
+          id: 'age',
+          label: 'Age identifier',
+          status: 'fail',
+          detail: `"${normalized.slice(2, 4)}" is not a valid age identifier for a date up to ${reference.toISOString().slice(0, 10)} (future or out-of-range plate)`,
+        });
+      }
+    } else if (age) {
+      checks.push({
+        id: 'age',
+        label: 'Age identifier',
+        status: 'info',
+        detail: `${age.description} (${classification.format} format, about ${age.ageYears} years old)`,
+        data: { ...age },
+      });
+    }
+
+    // 3. Region (memory tag) --------------------------------------------------
+    let region = null as PlateCheck['region'];
+    if (classification.format === 'current') {
+      region = lookupMemoryTag(normalized.slice(0, 2));
+      checks.push({
+        id: 'region',
+        label: 'Region of registration',
+        status: region ? 'pass' : 'warn',
+        detail: region
+          ? `${normalized.slice(0, 2)} → ${region.office}, ${region.region} (${region.country})`
+          : `Memory tag "${normalized.slice(0, 2)}" is not in the DVLA table`,
+        data: region ? { ...region } : undefined,
+      });
+    } else if (classification.format === 'northern-ireland') {
+      region = {
+        memoryTag: normalized.replace(/[0-9]/g, ''),
+        region: 'Northern Ireland',
+        office: 'Northern Ireland (dateless series)',
+        country: 'Northern Ireland',
+      };
+      checks.push({
+        id: 'region',
+        label: 'Region of registration',
+        status: 'info',
+        detail: 'Northern Ireland dateless format (contains I or Z) — no age can be derived',
+      });
+    }
+
+    // 4. DVLA Vehicle Enquiry Service ---------------------------------------
+    let vehicle: VehicleRecord | null = null;
+    const wantVehicle = options.includeVehicleData ?? true;
+    if (wantVehicle && classification.valid) {
+      vehicle = await this.runVehicleLookup(normalized, checks, sources, age, reference);
+    } else if (wantVehicle) {
+      checks.push({
+        id: 'dvla-record',
+        label: 'DVLA vehicle record',
+        status: 'skipped',
+        detail: 'Skipped — registration is not structurally valid',
+      });
+    }
+
+    // 5. MOT history -------------------------------------------------------
+    let mot: PlateCheck['mot'] = null;
+    const wantMot = options.includeMotHistory ?? true;
+    if (wantMot && classification.valid && this.motProvider) {
+      mot = await this.runMotLookup(normalized, checks, sources, reference);
+    } else if (wantMot && !this.motProvider?.configured) {
+      checks.push({
+        id: 'mot-history',
+        label: 'MOT test history',
+        status: 'skipped',
+        detail: 'Skipped — DVSA MOT History API credentials are not configured',
+      });
+    }
+
+    // 6. Theft / finance — no free open API; guidance only -----------------
+    checks.push({
+      id: 'theft-finance',
+      label: 'Stolen / outstanding finance / write-off',
+      status: 'info',
+      detail:
+        'Not checked. These require a paid provider (e.g. an HPI-style check). The Police ' +
+        'Digital Service and DVLA do not expose a free API for this.',
+    });
+
+    const pass = checks.filter((c) => c.status === 'pass').length;
+    const warn = checks.filter((c) => c.status === 'warn').length;
+    const fail = checks.filter((c) => c.status === 'fail').length;
+    const status: PlateCheck['summary']['status'] =
+      fail > 0 ? 'invalid' : warn > 0 ? 'attention' : 'ok';
+
+    return {
+      input,
+      normalized,
+      formatted,
+      valid: classification.valid,
+      format: classification.format,
+      age,
+      region,
+      vehicle,
+      mot,
+      checks,
+      summary: {
+        status,
+        headline: this.headline(status, classification.valid, vehicle),
+        pass,
+        warn,
+        fail,
+      },
+      sources: [...sources],
+      checkedAt: reference.toISOString(),
+    };
+  }
+
+  private headline(
+    status: PlateCheck['summary']['status'],
+    valid: boolean,
+    vehicle: VehicleRecord | null,
+  ): string {
+    if (!valid) return 'Not a valid UK registration mark';
+    const desc = vehicle?.make
+      ? `${[vehicle.colour, vehicle.make].filter(Boolean).join(' ')}${
+          vehicle.yearOfManufacture ? ` (${vehicle.yearOfManufacture})` : ''
+        }`
+      : 'Valid UK registration';
+    if (status === 'ok') return `${desc} — all checks passed`;
+    if (status === 'attention') return `${desc} — needs attention`;
+    return `${desc} — failed one or more checks`;
+  }
+
+  private async runVehicleLookup(
+    normalized: string,
+    checks: CheckItem[],
+    sources: Set<string>,
+    age: PlateCheck['age'],
+    reference: Date,
+  ): Promise<VehicleRecord | null> {
+    if (!this.vehicleProvider?.configured) {
+      checks.push({
+        id: 'dvla-record',
+        label: 'DVLA vehicle record',
+        status: 'skipped',
+        detail: 'Skipped — DVLA Vehicle Enquiry Service API key is not configured',
+      });
+      return null;
+    }
+
+    const result = await this.vehicleProvider.lookup(normalized);
+    if (!result.ok || !result.data) {
+      const fallback = {
+        status: 'warn' as CheckStatus,
+        detail: result.message ?? 'DVLA lookup failed',
+      };
+      const map: Record<string, { status: CheckStatus; detail: string }> = {
+        not_found: { status: 'warn', detail: 'DVLA has no vehicle for this registration' },
+        rate_limited: { status: 'warn', detail: 'DVLA Vehicle Enquiry Service rate limit hit' },
+        unconfigured: { status: 'skipped', detail: 'DVLA VES API key is not configured' },
+      };
+      const m = map[result.reason ?? ''] ?? fallback;
+      checks.push({
+        id: 'dvla-record',
+        label: 'DVLA vehicle record',
+        status: m.status,
+        detail: m.detail,
+      });
+      return null;
+    }
+
+    const v = result.data;
+    sources.add(this.vehicleProvider.name);
+    checks.push({
+      id: 'dvla-record',
+      label: 'DVLA vehicle record',
+      status: 'pass',
+      detail: [v.colour, v.make, v.fuelType, v.yearOfManufacture].filter(Boolean).join(' · '),
+      data: { ...v },
+    });
+
+    // Tax
+    const taxed = v.taxStatus?.toLowerCase();
+    checks.push({
+      id: 'tax',
+      label: 'Vehicle tax',
+      status: taxed === 'taxed' ? 'pass' : taxed === 'sorn' ? 'warn' : taxed ? 'fail' : 'info',
+      detail: v.taxStatus
+        ? `${v.taxStatus}${v.taxDueDate ? ` (due ${v.taxDueDate})` : ''}`
+        : 'Tax status not reported',
+    });
+
+    // MOT status (from VES — coarse; MOT history API is more detailed)
+    const motStatus = v.motStatus?.toLowerCase();
+    const motDays = daysUntil(v.motExpiryDate, reference);
+    checks.push({
+      id: 'mot-status',
+      label: 'MOT status',
+      status:
+        motStatus === 'valid' && (motDays === null || motDays > 30)
+          ? 'pass'
+          : motStatus === 'valid'
+            ? 'warn'
+            : motStatus === 'not valid'
+              ? 'fail'
+              : 'info',
+      detail: v.motStatus
+        ? `${v.motStatus}${v.motExpiryDate ? ` — expires ${v.motExpiryDate}` : ''}${
+            motDays !== null && motDays <= 30 && motDays >= 0 ? ` (in ${motDays} days)` : ''
+          }${motDays !== null && motDays < 0 ? ` (${Math.abs(motDays)} days ago)` : ''}`
+        : 'MOT status not reported',
+    });
+
+    // Export marker
+    if (v.markedForExport) {
+      checks.push({
+        id: 'export',
+        label: 'Export marker',
+        status: 'warn',
+        detail: 'This vehicle is marked for export',
+      });
+    }
+
+    // Year vs plate-age consistency
+    if (age && typeof v.yearOfManufacture === 'number') {
+      const within = Math.abs(v.yearOfManufacture - age.approxYear) <= 1;
+      checks.push({
+        id: 'year-consistency',
+        label: 'Plate age vs manufacture year',
+        status: within ? 'pass' : 'warn',
+        detail: within
+          ? `Manufacture year ${v.yearOfManufacture} matches the age identifier (~${age.approxYear})`
+          : `Manufacture year ${v.yearOfManufacture} differs from the plate's age identifier (~${age.approxYear}) — likely a private/cherished plate transfer`,
+      });
+    }
+
+    return v;
+  }
+
+  private async runMotLookup(
+    normalized: string,
+    checks: CheckItem[],
+    sources: Set<string>,
+    reference: Date,
+  ): Promise<PlateCheck['mot']> {
+    const result = await this.motProvider!.lookup(normalized);
+    if (!result.ok || !result.data) {
+      const detailMap: Record<string, string> = {
+        not_found: 'No MOT history found for this registration (may be new or exempt)',
+        rate_limited: 'MOT History API rate limit hit',
+        unconfigured: 'MOT History API credentials are not configured',
+      };
+      checks.push({
+        id: 'mot-history',
+        label: 'MOT test history',
+        status: result.reason === 'unconfigured' ? 'skipped' : 'warn',
+        detail: detailMap[result.reason ?? ''] ?? result.message ?? 'MOT history lookup failed',
+      });
+      return null;
+    }
+
+    const mot = result.data;
+    sources.add(this.motProvider!.name);
+    const expiryDays = daysUntil(mot.motTestExpiryDate, reference);
+    checks.push({
+      id: 'mot-history',
+      label: 'MOT test history',
+      status:
+        expiryDays !== null && expiryDays < 0
+          ? 'fail'
+          : expiryDays !== null && expiryDays <= 30
+            ? 'warn'
+            : 'pass',
+      detail: `${mot.totalTests} tests (${mot.passed} passed, ${mot.failed} failed)${
+        mot.motTestExpiryDate ? `; current certificate expires ${mot.motTestExpiryDate}` : ''
+      }`,
+      data: {
+        totalTests: mot.totalTests,
+        passed: mot.passed,
+        failed: mot.failed,
+        latestResult: mot.latestResult,
+        latestOdometer: mot.latestOdometer,
+      },
+    });
+
+    if (mot.mileageAnomaly) {
+      checks.push({
+        id: 'mileage',
+        label: 'Odometer consistency',
+        status: 'warn',
+        detail: 'Recorded mileage decreases between MOT tests — possible clocking or data error',
+      });
+    } else if (mot.latestOdometer) {
+      checks.push({
+        id: 'mileage',
+        label: 'Odometer consistency',
+        status: 'pass',
+        detail: `Mileage increases consistently; latest reading ${mot.latestOdometer.value.toLocaleString()} ${mot.latestOdometer.unit}`,
+      });
+    }
+
+    return mot;
+  }
+}

@@ -1,0 +1,257 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import type { Config } from '../core/config.js';
+import { classifyPlate, formatPlate, normalizePlate } from '../core/plate/format.js';
+import { createPlateChecker } from '../core/plate/index.js';
+import { decodeAge } from '../core/plate/age.js';
+import { lookupMemoryTag } from '../core/plate/regions.js';
+import { DvlaVesProvider } from '../core/plate/providers/dvla-ves.js';
+import { MotHistoryProvider } from '../core/plate/providers/mot-history.js';
+import { BeaconClient } from './beacon-client.js';
+
+export interface BuildMcpServerOptions {
+  config: Config;
+  beaconApiUrl: string;
+  version: string;
+  fetchImpl?: typeof fetch;
+}
+
+type ToolText = {
+  [x: string]: unknown;
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+};
+
+function ok(data: unknown): ToolText {
+  const structured =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : { result: data };
+  return {
+    content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+    structuredContent: structured,
+  };
+}
+
+function fail(message: string): ToolText {
+  return { content: [{ type: 'text', text: `Error: ${message}` }], isError: true };
+}
+
+/**
+ * Build the Beacon MCP server: number-plate tools (in-process) plus search-index
+ * tools that proxy to a running Beacon Search HTTP API.
+ */
+export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
+  const { config, beaconApiUrl, version, fetchImpl } = options;
+  const checker = createPlateChecker(config, fetchImpl);
+  const vesProvider = new DvlaVesProvider({
+    apiKey: config.plate.dvlaVesApiKey,
+    baseUrl: config.plate.dvlaVesBaseUrl,
+    fetchImpl,
+  });
+  const motProvider = new MotHistoryProvider({
+    clientId: config.plate.motClientId,
+    clientSecret: config.plate.motClientSecret,
+    apiKey: config.plate.motApiKey,
+    tokenUrl: config.plate.motTokenUrl,
+    scope: config.plate.motScope,
+    baseUrl: config.plate.motBaseUrl,
+    fetchImpl,
+  });
+  const beacon = new BeaconClient(beaconApiUrl, fetchImpl);
+
+  const server = new McpServer(
+    { name: 'beacon-search', version },
+    {
+      instructions:
+        'Tools for UK number-plate analysis (offline format/age/region plus optional ' +
+        'DVLA and DVSA lookups) and for searching / adding documents in a running ' +
+        'Beacon Search instance.',
+    },
+  );
+
+  const plateArg = z
+    .string()
+    .min(1)
+    .max(16)
+    .describe('A UK vehicle registration mark, e.g. "AB12 CDE"');
+
+  server.registerTool(
+    'check_number_plate',
+    {
+      title: 'Check a UK number plate',
+      description:
+        'Run all automatic checks on a registration mark: format validation, age identifier, ' +
+        'region of registration, and (when API credentials are configured) DVLA tax/MOT status ' +
+        'and DVSA MOT history. Returns a structured report with per-check pass/warn/fail status.',
+      inputSchema: {
+        plate: plateArg,
+        includeVehicleData: z
+          .boolean()
+          .optional()
+          .describe('Query the DVLA Vehicle Enquiry Service (default true)'),
+        includeMotHistory: z
+          .boolean()
+          .optional()
+          .describe('Query the DVSA MOT History API (default true)'),
+        referenceDate: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Evaluate as if checked on this ISO date/time'),
+      },
+    },
+    async (args) => {
+      try {
+        const check = await checker.check(args.plate, {
+          includeVehicleData: args.includeVehicleData,
+          includeMotHistory: args.includeMotHistory,
+          referenceDate: args.referenceDate,
+        });
+        return ok(check);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+    },
+  );
+
+  server.registerTool(
+    'validate_plate_format',
+    {
+      title: 'Validate plate format',
+      description:
+        'Offline check of whether a string is a structurally valid UK registration mark.',
+      inputSchema: { plate: plateArg },
+    },
+    async (args) => {
+      const normalized = normalizePlate(args.plate);
+      const classification = classifyPlate(normalized);
+      return ok({
+        input: args.plate,
+        normalized,
+        formatted: formatPlate(normalized, classification.format),
+        ...classification,
+      });
+    },
+  );
+
+  server.registerTool(
+    'decode_plate',
+    {
+      title: 'Decode plate age and region',
+      description:
+        'Offline decode of a plate: the registration date range from the age identifier and the ' +
+        'DVLA office / region from the memory tag. No external calls.',
+      inputSchema: { plate: plateArg },
+    },
+    async (args) => {
+      const normalized = normalizePlate(args.plate);
+      const { format, valid } = classifyPlate(normalized);
+      const age = decodeAge(normalized, format, new Date());
+      const region = format === 'current' ? lookupMemoryTag(normalized.slice(0, 2)) : null;
+      return ok({ normalized, format, valid, age, region });
+    },
+  );
+
+  server.registerTool(
+    'dvla_vehicle_enquiry',
+    {
+      title: 'DVLA Vehicle Enquiry Service lookup',
+      description:
+        'Fetch make, colour, year, fuel type, tax status and MOT status for a registration from ' +
+        'the DVLA VES API. Requires DVLA_VES_API_KEY.',
+      inputSchema: { plate: plateArg },
+    },
+    async (args) => {
+      if (!vesProvider.configured) return fail('DVLA_VES_API_KEY is not configured');
+      const result = await vesProvider.lookup(normalizePlate(args.plate));
+      return result.ok ? ok(result.data) : fail(result.message ?? result.reason ?? 'lookup failed');
+    },
+  );
+
+  server.registerTool(
+    'mot_history',
+    {
+      title: 'DVSA MOT history lookup',
+      description:
+        'Fetch the full MOT test history (results, mileage, defects) for a registration from the ' +
+        'DVSA MOT History API. Requires MOT_CLIENT_ID / MOT_CLIENT_SECRET / MOT_API_KEY / MOT_TOKEN_URL.',
+      inputSchema: { plate: plateArg },
+    },
+    async (args) => {
+      if (!motProvider.configured)
+        return fail('DVSA MOT History API credentials are not configured');
+      const result = await motProvider.lookup(normalizePlate(args.plate));
+      return result.ok ? ok(result.data) : fail(result.message ?? result.reason ?? 'lookup failed');
+    },
+  );
+
+  server.registerTool(
+    'beacon_search',
+    {
+      title: 'Search the Beacon index',
+      description: 'Full-text search against a running Beacon Search instance.',
+      inputSchema: {
+        query: z.string().describe('Search query (blank returns the newest documents)'),
+        limit: z.number().int().min(1).max(50).optional(),
+        tags: z.array(z.string()).optional().describe('Only return documents with all these tags'),
+        source: z.string().optional(),
+      },
+    },
+    async (args) => {
+      try {
+        return ok(
+          await beacon.search({
+            q: args.query,
+            limit: args.limit,
+            tags: args.tags,
+            source: args.source,
+          }),
+        );
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+    },
+  );
+
+  server.registerTool(
+    'beacon_index_document',
+    {
+      title: 'Add a document to the Beacon index',
+      description: 'Create or replace a document in a running Beacon Search instance.',
+      inputSchema: {
+        title: z.string().min(1),
+        body: z.string().default(''),
+        url: z.string().url().optional(),
+        tags: z.array(z.string()).optional(),
+        source: z.string().optional(),
+      },
+    },
+    async (args) => {
+      try {
+        return ok(await beacon.addDocument(args));
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+    },
+  );
+
+  server.registerTool(
+    'beacon_stats',
+    {
+      title: 'Beacon index statistics',
+      description: 'Document counts, top tags and sources from a running Beacon Search instance.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return ok(await beacon.stats());
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+    },
+  );
+
+  return server;
+}

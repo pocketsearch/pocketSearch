@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../core/config.js';
 import { crawl } from '../core/crawler.js';
+import { createPlateChecker, plateCheckToDocument } from '../core/plate/index.js';
 import type { PersistentEngine } from '../core/store.js';
 import {
   bulkInputSchema,
@@ -9,6 +10,13 @@ import {
   documentInputSchema,
   searchQuerySchema,
 } from '../core/types.js';
+
+const plateCheckQuerySchema = z.object({
+  vehicle: z.coerce.boolean().default(true),
+  mot: z.coerce.boolean().default(true),
+  index: z.coerce.boolean().optional(),
+  referenceDate: z.string().datetime().optional(),
+});
 
 export interface RouteContext {
   config: Config;
@@ -54,11 +62,13 @@ export function registerErrorHandler(app: FastifyInstance): void {
 export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
   return async (app) => {
     const { engine, config } = ctx;
+    const plateChecker = createPlateChecker(config);
 
     app.get('/health', async () => ({
       status: 'ok',
       documents: engine.size,
       uptimeSeconds: Math.round(process.uptime()),
+      plateChecks: plateChecker.capabilities,
     }));
 
     app.get('/stats', async () => engine.stats(config.indexFile));
@@ -122,6 +132,35 @@ export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
     app.post('/index/clear', async () => {
       engine.clear();
       return { ok: true, documents: engine.size };
+    });
+
+    // --- Number plate checker -------------------------------------------------
+    const runPlateCheck = async (plate: string, query: z.infer<typeof plateCheckQuerySchema>) => {
+      const check = await plateChecker.check(plate, {
+        includeVehicleData: query.vehicle,
+        includeMotHistory: query.mot,
+        referenceDate: query.referenceDate,
+      });
+      if (query.index ?? config.plate.indexResults) {
+        engine.upsert(plateCheckToDocument(check));
+        await engine.flush();
+      }
+      return check;
+    };
+
+    app.get('/plate/:plate', async (request) => {
+      const { plate } = z.object({ plate: z.string().min(1).max(16) }).parse(request.params);
+      const query = plateCheckQuerySchema.parse(request.query);
+      return runPlateCheck(plate, query);
+    });
+
+    app.post('/plate/check', async (request) => {
+      const body = z
+        .object({ plate: z.string().min(1).max(16) })
+        .and(plateCheckQuerySchema.partial())
+        .parse(request.body ?? {});
+      const query = plateCheckQuerySchema.parse(body);
+      return runPlateCheck(body.plate, query);
     });
 
     app.post('/crawl', async (request) => {

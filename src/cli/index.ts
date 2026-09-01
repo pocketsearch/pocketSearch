@@ -6,6 +6,8 @@ import { loadConfig } from '../core/config.js';
 import { loadDotEnv } from '../core/env.js';
 import { crawl } from '../core/crawler.js';
 import { createLogger } from '../core/logger.js';
+import { createPlateChecker, plateCheckToDocument } from '../core/plate/index.js';
+import type { CheckStatus } from '../core/plate/types.js';
 import { PersistentEngine } from '../core/store.js';
 import { documentInputSchema, type DocumentInput } from '../core/types.js';
 import { buildApp } from '../server/app.js';
@@ -197,6 +199,55 @@ program
     const { engine, indexFile } = await openEngine();
     process.stdout.write(`${JSON.stringify(engine.stats(indexFile), null, 2)}\n`);
   });
+
+program
+  .command('plate <registration>')
+  .description('Run automatic checks on a UK number plate')
+  .option('--no-vehicle', 'skip the DVLA Vehicle Enquiry Service lookup')
+  .option('--no-mot', 'skip the DVSA MOT history lookup')
+  .option('--index', 'also store the result in the search index', false)
+  .option('--json', 'output raw JSON', false)
+  .action(
+    async (
+      registration: string,
+      opts: { vehicle?: boolean; mot?: boolean; index?: boolean; json?: boolean },
+    ) => {
+      const config = loadConfig();
+      const checker = createPlateChecker(config);
+      const check = await checker.check(registration, {
+        includeVehicleData: opts.vehicle !== false,
+        includeMotHistory: opts.mot !== false,
+      });
+
+      if (opts.index) {
+        const { engine } = await openEngine();
+        engine.upsert(plateCheckToDocument(check));
+        await engine.flush();
+      }
+
+      if (opts.json) {
+        process.stdout.write(`${JSON.stringify(check, null, 2)}\n`);
+        return;
+      }
+
+      const icon: Record<CheckStatus, string> = {
+        pass: '✔',
+        warn: '▲',
+        fail: '✘',
+        info: 'ℹ',
+        skipped: '·',
+      };
+      process.stdout.write(`\n  ${check.formatted}  —  ${check.summary.headline}\n`);
+      process.stdout.write(
+        `  format: ${check.format}   valid: ${check.valid ? 'yes' : 'no'}   ` +
+          `${check.summary.pass} passed / ${check.summary.warn} warnings / ${check.summary.fail} failed\n\n`,
+      );
+      for (const item of check.checks) {
+        process.stdout.write(`  ${icon[item.status]} ${item.label}: ${item.detail}\n`);
+      }
+      process.stdout.write(`\n  sources: ${check.sources.join(', ')}\n`);
+    },
+  );
 
 program.parseAsync().catch((error: unknown) => {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

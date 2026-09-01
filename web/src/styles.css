@@ -344,3 +344,176 @@ body {
 .app__footer a {
   color: var(--accent);
 }
+
+/* --- Plate checker --- */
+.plate__form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.plate__input {
+  flex: 1;
+  font-size: 1.3rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: #f9d616;
+  color: #111;
+}
+
+.plate__opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.plate__opts label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.plate__report {
+  margin-top: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+}
+
+.plate__headline {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.plate__mark {
+  display: block;
+  font-size: 1.2rem;
+}
+
+.plate__desc {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.badge {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  color: #fff;
+}
+
+.badge--ok {
+  background: var(--ok);
+}
+
+.badge--warn {
+  background: #d9a406;
+}
+
+.badge--fail {
+  background: var(--error);
+}
+
+.plate__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.5rem 1.5rem;
+  margin: 0 0 1rem;
+}
+
+.plate__facts div {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+}
+
+.plate__facts dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.plate__facts dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.92rem;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.checks__item {
+  display: grid;
+  grid-template-columns: 1.2rem minmax(9rem, auto) 1fr;
+  gap: 0.5rem;
+  align-items: start;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.checks__label {
+  font-weight: 600;
+}
+
+.checks__detail {
+  color: var(--muted);
+}
+
+.checks__item--pass .checks__icon {
+  color: var(--ok);
+}
+.checks__item--warn .checks__icon {
+  color: #d9a406;
+}
+.checks__item--fail {
+  background: color-mix(in srgb, var(--error) 12%, var(--bg));
+}
+.checks__item--fail .checks__icon {
+  color: var(--error);
+}
+.checks__item--info .checks__icon,
+.checks__item--skipped .checks__icon {
+  color: var(--muted);
+}
+
+.plate__mot {
+  margin-top: 1rem;
+  font-size: 0.88rem;
+}
+
+.plate__mot summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.plate__mot ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+}
+
+.plate__sources {
+  margin: 1rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}

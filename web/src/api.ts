@@ -40,6 +40,54 @@ export interface BeaconDocument {
   updatedAt: string;
 }
 
+export interface PlateCheck {
+  input: string;
+  normalized: string;
+  formatted: string;
+  valid: boolean;
+  format: string;
+  age: {
+    identifier: string;
+    registeredFrom: string;
+    registeredTo: string;
+    approxYear: number;
+    ageYears: number;
+    description: string;
+  } | null;
+  region: { memoryTag: string; region: string; office: string; country: string } | null;
+  vehicle:
+    | (Record<string, unknown> & {
+        make?: string;
+        colour?: string;
+        fuelType?: string;
+        yearOfManufacture?: number;
+      })
+    | null;
+  mot: {
+    totalTests: number;
+    passed: number;
+    failed: number;
+    tests: Array<{
+      completedDate?: string;
+      testResult?: string;
+      odometerValue?: number;
+      odometerUnit?: string;
+      motTestNumber?: string;
+      defects: unknown[];
+    }>;
+  } | null;
+  checks: Array<{ id: string; label: string; status: string; detail: string }>;
+  summary: {
+    status: 'ok' | 'attention' | 'invalid';
+    headline: string;
+    pass: number;
+    warn: number;
+    fail: number;
+  };
+  sources: string[];
+  checkedAt: string;
+}
+
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -106,5 +154,16 @@ export const api = {
   },
   clearIndex(): Promise<{ ok: boolean; documents: number }> {
     return request('/api/index/clear', { method: 'POST' });
+  },
+  checkPlate(params: {
+    plate: string;
+    vehicle?: boolean;
+    mot?: boolean;
+    index?: boolean;
+  }): Promise<PlateCheck> {
+    return request<PlateCheck>('/api/plate/check', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
   },
 };

@@ -17,6 +17,20 @@ export interface Config {
   crawlDelayMs: number;
   crawlAllowPrivateHosts: boolean;
   maxBodyBytes: number;
+  plate: PlateConfig;
+}
+
+export interface PlateConfig {
+  dvlaVesApiKey?: string;
+  dvlaVesBaseUrl?: string;
+  motClientId?: string;
+  motClientSecret?: string;
+  motApiKey?: string;
+  motTokenUrl?: string;
+  motScope?: string;
+  motBaseUrl?: string;
+  /** Index each plate check into the search engine as a document. */
+  indexResults: boolean;
 }
 
 function readInt(name: string, fallback: number): number {
@@ -38,6 +52,11 @@ function readBool(name: string, fallback: boolean): boolean {
 function readString(name: string, fallback: string): string {
   const raw = process.env[name];
   return raw === undefined || raw.trim() === '' ? fallback : raw;
+}
+
+function readOptional(name: string): string | undefined {
+  const raw = process.env[name];
+  return raw === undefined || raw.trim() === '' ? undefined : raw.trim();
 }
 
 /**
@@ -69,6 +88,17 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     crawlDelayMs: readInt('BEACON_CRAWL_DELAY_MS', 150),
     crawlAllowPrivateHosts: readBool('BEACON_CRAWL_ALLOW_PRIVATE', false),
     maxBodyBytes: readInt('BEACON_MAX_BODY_BYTES', 8 * 1024 * 1024),
+    plate: {
+      dvlaVesApiKey: readOptional('DVLA_VES_API_KEY'),
+      dvlaVesBaseUrl: readOptional('DVLA_VES_BASE_URL'),
+      motClientId: readOptional('MOT_CLIENT_ID'),
+      motClientSecret: readOptional('MOT_CLIENT_SECRET'),
+      motApiKey: readOptional('MOT_API_KEY'),
+      motTokenUrl: readOptional('MOT_TOKEN_URL'),
+      motScope: readOptional('MOT_SCOPE'),
+      motBaseUrl: readOptional('MOT_BASE_URL'),
+      indexResults: readBool('BEACON_PLATE_INDEX_RESULTS', false),
+    },
   };
 
   return { ...base, ...overrides };
