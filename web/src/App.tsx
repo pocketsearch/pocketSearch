@@ -141,6 +141,10 @@ function SearchView(): JSX.Element {
   return (
     <section className="search">
       <div className="search__box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" strokeLinecap="round" />
+        </svg>
         <input
           type="search"
           autoFocus
@@ -149,6 +153,16 @@ function SearchView(): JSX.Element {
           onChange={(event) => setInput(event.target.value)}
           aria-label="Search query"
         />
+        {input && (
+          <button
+            type="button"
+            className="search__clear"
+            onClick={() => setInput('')}
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {activeTags.length > 0 && (
@@ -170,9 +184,14 @@ function SearchView(): JSX.Element {
 
       {result && (
         <p className="search__meta">
-          {result.total.toLocaleString()} result{result.total === 1 ? '' : 's'}
+          <strong>{result.total.toLocaleString()}</strong> result{result.total === 1 ? '' : 's'}
           {result.query ? ` for “${result.query}”` : ''} · {result.tookMs} ms
-          {loading ? ' · updating…' : ''}
+          {loading && (
+            <>
+              {' · '}
+              <span className="search__updating" aria-hidden /> updating
+            </>
+          )}
         </p>
       )}
 
@@ -224,7 +243,17 @@ function SearchView(): JSX.Element {
       </ol>
 
       {result && result.total === 0 && !loading && (
-        <p className="notice">No documents matched. Try a different query or add content.</p>
+        <div className="empty">
+          <span className="empty__icon" aria-hidden>
+            {query ? '🔍' : '🔦'}
+          </span>
+          <strong>{query ? 'No documents matched' : 'Your index is ready'}</strong>
+          <span>
+            {query
+              ? 'Try a different query, or loosen the active tag filters.'
+              : 'Start typing to search, or use Add document / Crawl site to fill the index.'}
+          </span>
+        </div>
       )}
 
       {result && result.total > PAGE_SIZE && (
