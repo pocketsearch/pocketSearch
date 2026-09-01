@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../../http.js';
 import type { MotSummary, MotTest } from '../types.js';
 import type { MotProvider, ProviderResult } from './types.js';
 
@@ -69,7 +70,7 @@ export class MotHistoryProvider implements MotProvider {
     );
   }
 
-  private async accessToken(signal: AbortSignal): Promise<string> {
+  private async accessToken(parentSignal?: AbortSignal): Promise<string> {
     if (this.token && this.token.expiresAt > Date.now() + 30_000) return this.token.value;
     const body = new URLSearchParams({
       grant_type: 'client_credentials',
@@ -77,11 +78,13 @@ export class MotHistoryProvider implements MotProvider {
       client_secret: this.cfg.clientSecret,
       scope: this.cfg.scope,
     });
-    const response = await this.cfg.fetchImpl(this.cfg.tokenUrl, {
+    const response = await fetchWithTimeout(this.cfg.tokenUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
-      signal,
+      timeoutMs: this.cfg.timeoutMs,
+      fetchImpl: this.cfg.fetchImpl,
+      parentSignal,
     });
     if (!response.ok) throw new Error(`token endpoint returned HTTP ${response.status}`);
     const json = (await response.json()) as { access_token: string; expires_in?: number };
@@ -95,14 +98,9 @@ export class MotHistoryProvider implements MotProvider {
   async lookup(normalizedPlate: string, signal?: AbortSignal): Promise<ProviderResult<MotSummary>> {
     if (!this.configured) return { ok: false, reason: 'unconfigured' };
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.cfg.timeoutMs);
-    const onAbort = () => controller.abort();
-    signal?.addEventListener('abort', onAbort, { once: true });
-
     try {
-      const token = await this.accessToken(controller.signal);
-      const response = await this.cfg.fetchImpl(
+      const token = await this.accessToken(signal);
+      const response = await fetchWithTimeout(
         `${this.cfg.baseUrl}/${encodeURIComponent(normalizedPlate)}`,
         {
           headers: {
@@ -110,7 +108,9 @@ export class MotHistoryProvider implements MotProvider {
             'x-api-key': this.cfg.apiKey,
             accept: 'application/json',
           },
-          signal: controller.signal,
+          timeoutMs: this.cfg.timeoutMs,
+          fetchImpl: this.cfg.fetchImpl,
+          parentSignal: signal,
         },
       );
 
@@ -131,9 +131,6 @@ export class MotHistoryProvider implements MotProvider {
         reason: 'error',
         message: error instanceof Error ? error.message : String(error),
       };
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
     }
   }
 }

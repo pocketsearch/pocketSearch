@@ -5,8 +5,9 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Config } from '../core/config.js';
 import { createLogger, type Logger } from '../core/logger.js';
+import { createPlateChecker } from '../core/plate/index.js';
 import { PersistentEngine } from '../core/store.js';
-import { apiRoutes, registerErrorHandler, type RouteContext } from './routes.js';
+import { apiRoutes, healthPayload, registerErrorHandler, type RouteContext } from './routes.js';
 
 export interface BuildAppOptions {
   config: Config;
@@ -53,11 +54,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   registerErrorHandler(app);
   await app.register(cors, { origin: config.corsOrigin });
 
-  const ctx: RouteContext = { config, engine };
+  const ctx: RouteContext = { config, engine, plateChecker: createPlateChecker(config) };
   await app.register(apiRoutes(ctx), { prefix: '/api' });
 
   // Back-compat / convenience alias so `/health` works without the prefix.
-  app.get('/health', async () => ({ status: 'ok', documents: engine.size }));
+  app.get('/health', async () => healthPayload(ctx));
 
   const hasWebBuild = existsSync(path.join(config.webDir, 'index.html'));
   if (hasWebBuild) {

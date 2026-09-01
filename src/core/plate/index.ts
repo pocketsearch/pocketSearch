@@ -1,4 +1,5 @@
 import type { Config } from '../config.js';
+import { slugify } from '../text.js';
 import type { DocumentInput } from '../types.js';
 import { PlateChecker } from './checker.js';
 import { DvlaVesProvider } from './providers/dvla-ves.js';
@@ -18,10 +19,12 @@ export function createPlateChecker(
   config: Pick<Config, 'plate'>,
   fetchImpl?: typeof fetch,
 ): PlateChecker {
+  const timeoutMs = config.plate.timeoutMs;
   return new PlateChecker({
     vehicleProvider: new DvlaVesProvider({
       apiKey: config.plate.dvlaVesApiKey,
       baseUrl: config.plate.dvlaVesBaseUrl,
+      timeoutMs,
       fetchImpl,
     }),
     motProvider: new MotHistoryProvider({
@@ -31,6 +34,7 @@ export function createPlateChecker(
       tokenUrl: config.plate.motTokenUrl,
       scope: config.plate.motScope,
       baseUrl: config.plate.motBaseUrl,
+      timeoutMs,
       fetchImpl,
     }),
   });
@@ -51,10 +55,9 @@ export function plateCheckToDocument(check: PlateCheck): DocumentInput {
     ...check.checks.map((c) => `[${c.status.toUpperCase()}] ${c.label}: ${c.detail}`),
   ].filter((l): l is string => l !== null);
 
-  const slug = (value: string) => value.toLowerCase().trim().replace(/\s+/g, '-');
   const tags = ['plate-check', `plate:${check.format}`, `result:${check.summary.status}`];
-  if (check.region?.country) tags.push(`country:${slug(check.region.country)}`);
-  if (check.vehicle?.make) tags.push(`make:${slug(check.vehicle.make)}`);
+  if (check.region?.country) tags.push(`country:${slugify(check.region.country)}`);
+  if (check.vehicle?.make) tags.push(`make:${slugify(check.vehicle.make)}`);
 
   return {
     id: `plate-${check.normalized || 'unknown'}`,

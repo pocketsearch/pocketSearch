@@ -24,6 +24,19 @@ export function normalizeWhitespace(input: string): string {
 }
 
 /**
+ * Turn arbitrary text into a lowercase, hyphen-separated slug suitable for a
+ * document id or tag value. Unicode letters/numbers are kept; everything else
+ * becomes a single hyphen.
+ */
+export function slugify(input: string, maxLength = 80): string {
+  return normalizeWhitespace(input)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, maxLength);
+}
+
+/**
  * Build a plain-text excerpt of `body` centered on the earliest match of any
  * search term. Falls back to the beginning of the text when nothing matches.
  */

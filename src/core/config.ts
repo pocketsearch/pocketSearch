@@ -29,6 +29,8 @@ export interface PlateConfig {
   motTokenUrl?: string;
   motScope?: string;
   motBaseUrl?: string;
+  /** Per-request timeout for the DVLA / DVSA HTTP calls (ms). */
+  timeoutMs: number;
   /** Index each plate check into the search engine as a document. */
   indexResults: boolean;
 }
@@ -51,19 +53,28 @@ function readBool(name: string, fallback: boolean): boolean {
 
 function readString(name: string, fallback: string): string {
   const raw = process.env[name];
-  return raw === undefined || raw.trim() === '' ? fallback : raw;
+  return raw === undefined || raw.trim() === '' ? fallback : raw.trim();
 }
 
+/**
+ * Read an optional string, accepting both the `BEACON_`-prefixed name and the
+ * bare name (the plate provider vars are commonly set with their DVLA/DVSA
+ * spelling, e.g. `DVLA_VES_API_KEY`).
+ */
 function readOptional(name: string): string | undefined {
-  const raw = process.env[name];
+  const raw = process.env[`BEACON_${name}`] ?? process.env[name];
   return raw === undefined || raw.trim() === '' ? undefined : raw.trim();
+}
+
+export interface ConfigOverrides extends Partial<Omit<Config, 'plate'>> {
+  plate?: Partial<PlateConfig>;
 }
 
 /**
  * Resolve runtime configuration from environment variables, applying safe
  * defaults so the app runs with zero configuration in any environment.
  */
-export function loadConfig(overrides: Partial<Config> = {}): Config {
+export function loadConfig(overrides: ConfigOverrides = {}): Config {
   const cwd = process.cwd();
   const dataDir = path.resolve(cwd, readString('BEACON_DATA_DIR', 'data'));
   const nodeEnv = process.env.NODE_ENV ?? 'development';
@@ -97,9 +108,12 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       motTokenUrl: readOptional('MOT_TOKEN_URL'),
       motScope: readOptional('MOT_SCOPE'),
       motBaseUrl: readOptional('MOT_BASE_URL'),
+      timeoutMs: readInt('BEACON_PLATE_TIMEOUT_MS', 12_000),
       indexResults: readBool('BEACON_PLATE_INDEX_RESULTS', false),
     },
   };
 
-  return { ...base, ...overrides };
+  // `plate` is merged rather than replaced so callers can override a single
+  // nested field without having to restate the whole PlateConfig.
+  return { ...base, ...overrides, plate: { ...base.plate, ...overrides.plate } };
 }

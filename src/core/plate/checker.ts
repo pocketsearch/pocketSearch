@@ -41,6 +41,11 @@ export class PlateChecker {
     };
   }
 
+  /** The wired providers, so callers can reuse them (shared token cache etc.). */
+  get providers(): { vehicle?: VehicleProvider; mot?: MotProvider } {
+    return { vehicle: this.vehicleProvider, mot: this.motProvider };
+  }
+
   async check(input: string, options: PlateCheckOptions = {}): Promise<PlateCheck> {
     const parsedRef = options.referenceDate ? new Date(options.referenceDate) : null;
     const reference = parsedRef && !Number.isNaN(parsedRef.getTime()) ? parsedRef : this.now();
@@ -48,7 +53,7 @@ export class PlateChecker {
     const classification = classifyPlate(normalized);
     const formatted = formatPlate(normalized, classification.format);
     const checks: CheckItem[] = [];
-    const sources = new Set<string>(['offline plate analysis']);
+    const sources = new Set<string>(['Offline plate analysis']);
 
     // 1. Format --------------------------------------------------------------
     checks.push({
@@ -231,12 +236,13 @@ export class PlateChecker {
     age: PlateCheck['age'],
     reference: Date,
   ): Promise<VehicleRecord | null> {
+    const providerName = this.vehicleProvider?.name ?? 'DVLA Vehicle Enquiry Service';
     if (!this.vehicleProvider?.configured) {
       checks.push({
         id: 'dvla-record',
         label: 'DVLA vehicle record',
         status: 'skipped',
-        detail: 'Skipped — DVLA Vehicle Enquiry Service API key is not configured',
+        detail: `Skipped — ${providerName} API key is not configured`,
       });
       return null;
     }
@@ -245,12 +251,11 @@ export class PlateChecker {
     if (!result.ok || !result.data) {
       const fallback = {
         status: 'warn' as CheckStatus,
-        detail: result.message ?? 'DVLA lookup failed',
+        detail: result.message ?? `${providerName} lookup failed`,
       };
       const map: Record<string, { status: CheckStatus; detail: string }> = {
         not_found: { status: 'warn', detail: 'DVLA has no vehicle for this registration' },
-        rate_limited: { status: 'warn', detail: 'DVLA Vehicle Enquiry Service rate limit hit' },
-        unconfigured: { status: 'skipped', detail: 'DVLA VES API key is not configured' },
+        rate_limited: { status: 'warn', detail: `${providerName} rate limit hit` },
       };
       const m = map[result.reason ?? ''] ?? fallback;
       checks.push({
@@ -336,18 +341,19 @@ export class PlateChecker {
     sources: Set<string>,
     reference: Date,
   ): Promise<PlateCheck['mot']> {
+    const providerName = this.motProvider?.name ?? 'DVSA MOT History API';
     const result = await this.motProvider!.lookup(normalized);
     if (!result.ok || !result.data) {
+      // `unconfigured` never reaches here — check() guards the call site.
       const detailMap: Record<string, string> = {
         not_found: 'No MOT history found for this registration (may be new or exempt)',
-        rate_limited: 'MOT History API rate limit hit',
-        unconfigured: 'MOT History API credentials are not configured',
+        rate_limited: `${providerName} rate limit hit`,
       };
       checks.push({
         id: 'mot-history',
         label: 'MOT test history',
-        status: result.reason === 'unconfigured' ? 'skipped' : 'warn',
-        detail: detailMap[result.reason ?? ''] ?? result.message ?? 'MOT history lookup failed',
+        status: 'warn',
+        detail: detailMap[result.reason ?? ''] ?? result.message ?? `${providerName} lookup failed`,
       });
       return null;
     }

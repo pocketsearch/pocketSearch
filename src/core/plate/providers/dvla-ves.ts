@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '../../http.js';
 import type { VehicleRecord } from '../types.js';
 import type { ProviderResult, VehicleProvider } from './types.js';
 
@@ -60,13 +61,8 @@ export class DvlaVesProvider implements VehicleProvider {
   ): Promise<ProviderResult<VehicleRecord>> {
     if (!this.apiKey) return { ok: false, reason: 'unconfigured' };
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    const onAbort = () => controller.abort();
-    signal?.addEventListener('abort', onAbort, { once: true });
-
     try {
-      const response = await this.fetchImpl(this.baseUrl, {
+      const response = await fetchWithTimeout(this.baseUrl, {
         method: 'POST',
         headers: {
           'x-api-key': this.apiKey,
@@ -74,7 +70,9 @@ export class DvlaVesProvider implements VehicleProvider {
           accept: 'application/json',
         },
         body: JSON.stringify({ registrationNumber: normalizedPlate }),
-        signal: controller.signal,
+        timeoutMs: this.timeoutMs,
+        fetchImpl: this.fetchImpl,
+        parentSignal: signal,
       });
 
       if (response.status === 404) return { ok: false, reason: 'not_found' };
@@ -114,9 +112,6 @@ export class DvlaVesProvider implements VehicleProvider {
         reason: 'error',
         message: error instanceof Error ? error.message : String(error),
       };
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
     }
   }
 }

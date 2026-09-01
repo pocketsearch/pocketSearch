@@ -1,12 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Config } from '../core/config.js';
+import { decodeAge } from '../core/plate/age.js';
 import { classifyPlate, formatPlate, normalizePlate } from '../core/plate/format.js';
 import { createPlateChecker } from '../core/plate/index.js';
-import { decodeAge } from '../core/plate/age.js';
 import { lookupMemoryTag } from '../core/plate/regions.js';
-import { DvlaVesProvider } from '../core/plate/providers/dvla-ves.js';
-import { MotHistoryProvider } from '../core/plate/providers/mot-history.js';
 import { BeaconClient } from './beacon-client.js';
 
 export interface BuildMcpServerOptions {
@@ -45,20 +43,8 @@ function fail(message: string): ToolText {
 export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   const { config, beaconApiUrl, version, fetchImpl } = options;
   const checker = createPlateChecker(config, fetchImpl);
-  const vesProvider = new DvlaVesProvider({
-    apiKey: config.plate.dvlaVesApiKey,
-    baseUrl: config.plate.dvlaVesBaseUrl,
-    fetchImpl,
-  });
-  const motProvider = new MotHistoryProvider({
-    clientId: config.plate.motClientId,
-    clientSecret: config.plate.motClientSecret,
-    apiKey: config.plate.motApiKey,
-    tokenUrl: config.plate.motTokenUrl,
-    scope: config.plate.motScope,
-    baseUrl: config.plate.motBaseUrl,
-    fetchImpl,
-  });
+  // Reuse the checker's provider instances (one MOT OAuth token cache, etc.).
+  const { vehicle: vesProvider, mot: motProvider } = checker.providers;
   const beacon = new BeaconClient(beaconApiUrl, fetchImpl);
 
   const server = new McpServer(
@@ -164,7 +150,7 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
       inputSchema: { plate: plateArg },
     },
     async (args) => {
-      if (!vesProvider.configured) return fail('DVLA_VES_API_KEY is not configured');
+      if (!vesProvider?.configured) return fail('DVLA_VES_API_KEY is not configured');
       const result = await vesProvider.lookup(normalizePlate(args.plate));
       return result.ok ? ok(result.data) : fail(result.message ?? result.reason ?? 'lookup failed');
     },
@@ -180,7 +166,7 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
       inputSchema: { plate: plateArg },
     },
     async (args) => {
-      if (!motProvider.configured)
+      if (!motProvider?.configured)
         return fail('DVSA MOT History API credentials are not configured');
       const result = await motProvider.lookup(normalizePlate(args.plate));
       return result.ok ? ok(result.data) : fail(result.message ?? result.reason ?? 'lookup failed');

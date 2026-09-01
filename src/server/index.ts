@@ -1,10 +1,10 @@
 import { loadConfig } from '../core/config.js';
 import { loadDotEnv } from '../core/env.js';
 import { createLogger } from '../core/logger.js';
-
-loadDotEnv();
 import { PersistentEngine } from '../core/store.js';
 import { buildApp } from './app.js';
+
+loadDotEnv();
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -34,8 +34,9 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-main().catch((error) => {
-  // eslint-disable-next-line no-console
-  console.error('Fatal startup error:', error);
+main().catch((error: unknown) => {
+  process.stderr.write(
+    `Fatal startup error: ${error instanceof Error ? error.stack : String(error)}\n`,
+  );
   process.exit(1);
 });

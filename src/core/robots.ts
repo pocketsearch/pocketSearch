@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from './http.js';
+
 /**
  * Minimal robots.txt matcher. Understands `User-agent`, `Disallow` and `Allow`
  * for the `*` group and for an explicitly named bot. Longest-match wins, which
@@ -72,13 +74,11 @@ export async function fetchRobots(
   timeoutMs: number,
 ): Promise<RobotsRules> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const response = await fetchImpl(`${origin}/robots.txt`, {
+    const response = await fetchWithTimeout(`${origin}/robots.txt`, {
       headers: { 'user-agent': userAgent },
-      signal: controller.signal,
+      timeoutMs,
+      fetchImpl,
     });
-    clearTimeout(timer);
     if (!response.ok) return new RobotsRules('', userAgent);
     return new RobotsRules(await response.text(), userAgent);
   } catch {

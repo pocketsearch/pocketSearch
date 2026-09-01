@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { escapeHtml, highlight, makeSnippet, normalizeWhitespace, tokenize } from './text.js';
+import {
+  escapeHtml,
+  highlight,
+  makeSnippet,
+  normalizeWhitespace,
+  slugify,
+  tokenize,
+} from './text.js';
+
+describe('slugify', () => {
+  it('lower-cases and hyphenates', () => {
+    expect(slugify('Northern Ireland')).toBe('northern-ireland');
+    expect(slugify('  LAND ROVER  ')).toBe('land-rover');
+    expect(slugify('Rolls-Royce')).toBe('rolls-royce');
+  });
+
+  it('trims leading/trailing separators and caps length', () => {
+    expect(slugify('!!!Hello!!!')).toBe('hello');
+    expect(slugify('a'.repeat(200)).length).toBe(80);
+    expect(slugify('x'.repeat(200), 10)).toBe('xxxxxxxxxx');
+  });
+
+  it('keeps Unicode letters and digits', () => {
+    expect(slugify('Citroën C4')).toBe('citroën-c4');
+  });
+});
 
 describe('tokenize', () => {
   it('splits on non-word characters and lowercases', () => {

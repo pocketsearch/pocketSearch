@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import MiniSearch from 'minisearch';
-import { highlight, makeSnippet, normalizeWhitespace, tokenize } from './text.js';
+import { highlight, makeSnippet, normalizeWhitespace, slugify, tokenize } from './text.js';
 import type {
   BeaconDocument,
   DocumentInput,
@@ -21,14 +21,6 @@ interface IndexedDoc {
 export interface SearchEngineEvents {
   /** Called after any mutation (upsert / remove / bulk load). */
   onChange?: () => void;
-}
-
-function slugify(input: string): string {
-  return normalizeWhitespace(input)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
 }
 
 /**

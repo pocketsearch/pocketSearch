@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Config } from '../core/config.js';
 import { crawl } from '../core/crawler.js';
-import { createPlateChecker, plateCheckToDocument } from '../core/plate/index.js';
+import type { PlateChecker } from '../core/plate/checker.js';
+import { plateCheckToDocument } from '../core/plate/index.js';
 import type { PersistentEngine } from '../core/store.js';
 import {
   booleanParam,
@@ -27,6 +28,17 @@ const plateCheckBodySchema = plateCheckQuerySchema.extend({
 export interface RouteContext {
   config: Config;
   engine: PersistentEngine;
+  plateChecker: PlateChecker;
+}
+
+/** Canonical `/health` body, used by both `/health` and `/api/health`. */
+export function healthPayload(ctx: Pick<RouteContext, 'engine' | 'plateChecker'>) {
+  return {
+    status: 'ok' as const,
+    documents: ctx.engine.size,
+    uptimeSeconds: Math.round(process.uptime()),
+    plateChecks: ctx.plateChecker.capabilities,
+  };
 }
 
 class HttpError extends Error {
@@ -48,16 +60,17 @@ export function registerErrorHandler(app: FastifyInstance): void {
       });
       return;
     }
+    const codeFor = (status: number) => (status === 404 ? 'not_found' : 'request_error');
     if (error instanceof HttpError) {
-      reply.status(error.statusCode).send({ error: 'request_error', message: error.message });
+      reply
+        .status(error.statusCode)
+        .send({ error: codeFor(error.statusCode), message: error.message });
       return;
     }
     const err = error as { statusCode?: number; message?: string; validation?: unknown };
     if (err.validation || (typeof err.statusCode === 'number' && err.statusCode < 500)) {
-      reply.status(err.statusCode ?? 400).send({
-        error: 'request_error',
-        message: err.message ?? 'Bad request',
-      });
+      const status = err.statusCode ?? 400;
+      reply.status(status).send({ error: codeFor(status), message: err.message ?? 'Bad request' });
       return;
     }
     request.log.error({ err: error }, 'unhandled error');
@@ -67,15 +80,9 @@ export function registerErrorHandler(app: FastifyInstance): void {
 
 export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
   return async (app) => {
-    const { engine, config } = ctx;
-    const plateChecker = createPlateChecker(config);
+    const { engine, config, plateChecker } = ctx;
 
-    app.get('/health', async () => ({
-      status: 'ok',
-      documents: engine.size,
-      uptimeSeconds: Math.round(process.uptime()),
-      plateChecks: plateChecker.capabilities,
-    }));
+    app.get('/health', async () => healthPayload(ctx));
 
     app.get('/stats', async () => engine.stats(config.indexFile));
 

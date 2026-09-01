@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { fetchWithTimeout } from './http.js';
 import type { Logger } from './logger.js';
 import { hostIsPrivate } from './net-guard.js';
 import { fetchRobots, RobotsRules } from './robots.js';
@@ -99,15 +100,13 @@ async function fetchText(
   fetchImpl: typeof fetch,
   parentSignal?: AbortSignal,
 ): Promise<{ html: string; finalUrl: string } | { error: string }> {
-  const controller = new AbortController();
-  const onAbort = () => controller.abort();
-  parentSignal?.addEventListener('abort', onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, {
+    const response = await fetchWithTimeout(url, {
       headers: { 'user-agent': userAgent, accept: 'text/html,application/xhtml+xml' },
       redirect: 'follow',
-      signal: controller.signal,
+      timeoutMs,
+      fetchImpl,
+      parentSignal,
     });
     if (!response.ok) return { error: `HTTP ${response.status}` };
     const contentType = response.headers.get('content-type') ?? '';
@@ -116,9 +115,6 @@ async function fetchText(
     return { html: await response.text(), finalUrl: response.url || url };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
-  } finally {
-    clearTimeout(timer);
-    parentSignal?.removeEventListener('abort', onAbort);
   }
 }
 
@@ -129,6 +125,7 @@ async function fetchText(
 export async function crawl(options: CrawlOptions, deps: CrawlDeps = {}): Promise<CrawlResult> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const logger = deps.logger;
+  const respectRobots = options.respectRobots !== false; // default: honour robots.txt
   const start = new URL(options.url);
   const origin = start.origin;
 
@@ -148,10 +145,9 @@ export async function crawl(options: CrawlOptions, deps: CrawlDeps = {}): Promis
     };
   }
 
-  const robots =
-    options.respectRobots === false
-      ? new RobotsRules('', options.userAgent)
-      : await fetchRobots(origin, options.userAgent, fetchImpl, options.timeoutMs);
+  const robots = respectRobots
+    ? await fetchRobots(origin, options.userAgent, fetchImpl, options.timeoutMs)
+    : new RobotsRules('', options.userAgent);
 
   const result: CrawlResult = {
     startUrl: start.toString(),
@@ -174,7 +170,7 @@ export async function crawl(options: CrawlOptions, deps: CrawlDeps = {}): Promis
     await Promise.all(
       batch.map(async (pageUrl) => {
         const parsed = new URL(pageUrl);
-        if (options.respectRobots !== false && !robots.isAllowed(parsed.pathname)) {
+        if (respectRobots && !robots.isAllowed(parsed.pathname)) {
           result.skipped.push({ url: pageUrl, reason: 'blocked by robots.txt' });
           return;
         }

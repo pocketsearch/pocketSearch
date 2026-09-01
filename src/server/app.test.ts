@@ -32,10 +32,25 @@ describe('HTTP API', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  it('reports health', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/health' });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ status: 'ok', documents: 0 });
+  it('reports health identically on /health and /api/health', async () => {
+    const api = await app.inject({ method: 'GET', url: '/api/health' });
+    const bare = await app.inject({ method: 'GET', url: '/health' });
+    expect(api.statusCode).toBe(200);
+    expect(api.json()).toMatchObject({
+      status: 'ok',
+      documents: 0,
+      plateChecks: expect.any(Object),
+    });
+    expect(Object.keys(bare.json()).sort()).toEqual(Object.keys(api.json()).sort());
+  });
+
+  it('returns error:"not_found" for both unknown routes and missing resources', async () => {
+    const route = await app.inject({ method: 'GET', url: '/api/nope' });
+    const doc = await app.inject({ method: 'GET', url: '/api/documents/missing-id' });
+    expect(route.statusCode).toBe(404);
+    expect(doc.statusCode).toBe(404);
+    expect(route.json().error).toBe('not_found');
+    expect(doc.json().error).toBe('not_found');
   });
 
   it('creates, fetches, searches and deletes a document', async () => {

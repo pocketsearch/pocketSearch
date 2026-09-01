@@ -29,6 +29,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `BeaconDocument`, `PlateCheck`) directly from the backend via a `@core/*` path
   alias, instead of maintaining hand-copied duplicates that could drift. These
   are type-only imports, erased at build time — the bundle is byte-identical.
+- Consistency pass (no behaviour change): `/health` and `/api/health` now return
+  the same body; HTTP 404s always use `error: "not_found"`; one `fetchWithTimeout`
+  helper backs every outbound request; one `slugify` backs ids and tags; the MCP
+  server reuses the checker's provider instances (single MOT token cache); the
+  DVLA/DVSA request timeout is configurable via `BEACON_PLATE_TIMEOUT_MS`; plate
+  provider env vars also accept a `BEACON_` prefix; `readString` trims;
+  `loadConfig` merges a partial `plate` override instead of replacing it.
 
 ### Fixed
 
