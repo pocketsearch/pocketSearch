@@ -23,6 +23,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `beacon_index_document` / `beacon_stats` (which proxy a running HTTP API).
   Project-scoped `.mcp.json` and `docs/mcp.md` included.
 
+### Changed
+
+- The web UI now imports its API response types (`SearchResponse`, `IndexStats`,
+  `BeaconDocument`, `PlateCheck`) directly from the backend via a `@core/*` path
+  alias, instead of maintaining hand-copied duplicates that could drift. These
+  are type-only imports, erased at build time — the bundle is byte-identical.
+
 ### Fixed
 
 - Boolean query-string params (`?fuzzy=`, `?prefix=`, `?vehicle=`, `?mot=`,

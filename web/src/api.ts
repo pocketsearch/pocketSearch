@@ -1,92 +1,10 @@
-export interface SearchHit {
-  id: string;
-  score: number;
-  title: string;
-  url?: string;
-  tags: string[];
-  source?: string;
-  snippet: string;
-  terms: string[];
-}
+// Response types are the backend's own definitions, shared via the `@core`
+// path alias (see vite.config.ts / tsconfig.json). These are type-only imports,
+// erased at build time — the web bundle never pulls in backend code.
+import type { BeaconDocument, IndexStats, SearchHit, SearchResponse } from '@core/types';
+import type { PlateCheck } from '@core/plate/types';
 
-export interface SearchResponse {
-  query: string;
-  total: number;
-  limit: number;
-  offset: number;
-  tookMs: number;
-  hits: SearchHit[];
-  facets: { tags: Record<string, number>; sources: Record<string, number> };
-}
-
-export interface IndexStats {
-  documents: number;
-  tags: number;
-  sources: number;
-  topTags: Array<{ tag: string; count: number }>;
-  topSources: Array<{ source: string; count: number }>;
-  indexFile: string;
-  lastPersistedAt: string | null;
-}
-
-export interface BeaconDocument {
-  id: string;
-  title: string;
-  body: string;
-  url?: string;
-  tags: string[];
-  source?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PlateCheck {
-  input: string;
-  normalized: string;
-  formatted: string;
-  valid: boolean;
-  format: string;
-  age: {
-    identifier: string;
-    registeredFrom: string;
-    registeredTo: string;
-    approxYear: number;
-    ageYears: number;
-    description: string;
-  } | null;
-  region: { memoryTag: string; region: string; office: string; country: string } | null;
-  vehicle:
-    | (Record<string, unknown> & {
-        make?: string;
-        colour?: string;
-        fuelType?: string;
-        yearOfManufacture?: number;
-      })
-    | null;
-  mot: {
-    totalTests: number;
-    passed: number;
-    failed: number;
-    tests: Array<{
-      completedDate?: string;
-      testResult?: string;
-      odometerValue?: number;
-      odometerUnit?: string;
-      motTestNumber?: string;
-      defects: unknown[];
-    }>;
-  } | null;
-  checks: Array<{ id: string; label: string; status: string; detail: string }>;
-  summary: {
-    status: 'ok' | 'attention' | 'fail' | 'invalid';
-    headline: string;
-    pass: number;
-    warn: number;
-    fail: number;
-  };
-  sources: string[];
-  checkedAt: string;
-}
+export type { BeaconDocument, IndexStats, PlateCheck, SearchHit, SearchResponse };
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 

@@ -17,6 +17,10 @@
     "jsx": "react-jsx",
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"]
+    },
     "outDir": "dist",
     "rootDir": "."
   },
