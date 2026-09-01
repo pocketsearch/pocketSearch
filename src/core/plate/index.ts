@@ -51,13 +51,13 @@ export function plateCheckToDocument(check: PlateCheck): DocumentInput {
     ...check.checks.map((c) => `[${c.status.toUpperCase()}] ${c.label}: ${c.detail}`),
   ].filter((l): l is string => l !== null);
 
+  const slug = (value: string) => value.toLowerCase().trim().replace(/\s+/g, '-');
   const tags = ['plate-check', `plate:${check.format}`, `result:${check.summary.status}`];
-  if (check.region?.country)
-    tags.push(`country:${check.region.country.toLowerCase().replace(/\s+/g, '-')}`);
-  if (check.vehicle?.make) tags.push(`make:${check.vehicle.make.toLowerCase()}`);
+  if (check.region?.country) tags.push(`country:${slug(check.region.country)}`);
+  if (check.vehicle?.make) tags.push(`make:${slug(check.vehicle.make)}`);
 
   return {
-    id: `plate-${check.normalized}`,
+    id: `plate-${check.normalized || 'unknown'}`,
     title: `Plate check — ${check.formatted}`,
     body: lines.join('\n'),
     tags,

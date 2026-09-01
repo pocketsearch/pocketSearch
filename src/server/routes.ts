@@ -5,17 +5,23 @@ import { crawl } from '../core/crawler.js';
 import { createPlateChecker, plateCheckToDocument } from '../core/plate/index.js';
 import type { PersistentEngine } from '../core/store.js';
 import {
+  booleanParam,
   bulkInputSchema,
   crawlInputSchema,
   documentInputSchema,
+  optionalBooleanParam,
   searchQuerySchema,
 } from '../core/types.js';
 
 const plateCheckQuerySchema = z.object({
-  vehicle: z.coerce.boolean().default(true),
-  mot: z.coerce.boolean().default(true),
-  index: z.coerce.boolean().optional(),
+  vehicle: booleanParam(true),
+  mot: booleanParam(true),
+  index: optionalBooleanParam,
   referenceDate: z.string().datetime().optional(),
+});
+
+const plateCheckBodySchema = plateCheckQuerySchema.extend({
+  plate: z.string().min(1).max(16),
 });
 
 export interface RouteContext {
@@ -155,12 +161,8 @@ export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
     });
 
     app.post('/plate/check', async (request) => {
-      const body = z
-        .object({ plate: z.string().min(1).max(16) })
-        .and(plateCheckQuerySchema.partial())
-        .parse(request.body ?? {});
-      const query = plateCheckQuerySchema.parse(body);
-      return runPlateCheck(body.plate, query);
+      const { plate, ...query } = plateCheckBodySchema.parse(request.body ?? {});
+      return runPlateCheck(plate, query);
     });
 
     app.post('/crawl', async (request) => {

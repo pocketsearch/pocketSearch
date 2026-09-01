@@ -125,4 +125,42 @@ describe('HTTP API', () => {
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('Beacon Search API is running');
   });
+
+  it('honours ?fuzzy=false in the query string (not a truthy string)', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/documents',
+      payload: { title: 'Performance tuning', body: 'about performance', tags: [] },
+    });
+    // "perfrmance" only matches "performance" via fuzzy search.
+    const fuzzy = await app.inject({ method: 'GET', url: '/api/search?q=perfrmance' });
+    expect(fuzzy.json().total).toBe(1);
+    const exact = await app.inject({ method: 'GET', url: '/api/search?q=perfrmance&fuzzy=false' });
+    expect(exact.json().total).toBe(0);
+  });
+
+  it('runs offline plate checks and honours ?vehicle=false / ?mot=false', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/plate/LA51ABC?vehicle=false&mot=false',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.valid).toBe(true);
+    expect(body.format).toBe('current');
+    expect(body.region.office).toBe('Wimbledon');
+    expect(body.summary.status).toBe('ok');
+    const vehicleCheck = body.checks.find((c: { id: string }) => c.id === 'dvla-record');
+    expect(vehicleCheck.status).toBe('skipped');
+  });
+
+  it('rejects a malformed plate as invalid, not "fail"', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/plate/check',
+      payload: { plate: 'NOT-A-PLATE', vehicle: false, mot: false },
+    });
+    expect(res.json().valid).toBe(false);
+    expect(res.json().summary.status).toBe('invalid');
+  });
 });

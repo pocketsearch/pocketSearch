@@ -78,7 +78,7 @@ export interface PlateCheck {
   } | null;
   checks: Array<{ id: string; label: string; status: string; detail: string }>;
   summary: {
-    status: 'ok' | 'attention' | 'invalid';
+    status: 'ok' | 'attention' | 'fail' | 'invalid';
     headline: string;
     pass: number;
     warn: number;

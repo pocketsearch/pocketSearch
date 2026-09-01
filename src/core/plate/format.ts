@@ -48,7 +48,9 @@ export function classifyPlate(normalized: string): PlateClassification {
     return {
       format: 'current',
       valid: false,
-      reason: 'current-style plate uses an illegal letter (I or Q, or Q in the random group)',
+      reason:
+        'current-style layout but uses a letter DVLA never issues here ' +
+        '(no I or Q anywhere; no Z in the two-letter area code)',
     };
   }
   if (looksNorthernIreland(plate)) {

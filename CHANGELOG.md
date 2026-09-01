@@ -23,6 +23,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `beacon_index_document` / `beacon_stats` (which proxy a running HTTP API).
   Project-scoped `.mcp.json` and `docs/mcp.md` included.
 
+### Fixed
+
+- Boolean query-string params (`?fuzzy=`, `?prefix=`, `?vehicle=`, `?mot=`,
+  `?index=`) were parsed with `z.coerce.boolean()`, so `?fuzzy=false` evaluated
+  to `true`. Replaced with a param-aware coercion.
+- Prefix-era age decoding placed T–Y registrations up to two years too late
+  (e.g. a Y-reg shown as 2003); replaced the arithmetic with an explicit
+  DVLA period table for both the prefix and suffix eras.
+- `PlateCheck.summary.status` now distinguishes `invalid` (malformed mark) from
+  `fail` (valid mark, a check failed) — an untaxed car with a valid plate is no
+  longer reported as "invalid".
+- MOT history: derive the current certificate expiry from the latest passed
+  test (the trade API has no vehicle-level expiry field), so an expired MOT is
+  actually flagged. Added a timeout to the OAuth token request.
+- `PlateChecker.check` no longer throws on an unparseable `referenceDate`, and
+  always emits a `dvla-record` / `mot-history` check line (skipped, with a
+  reason) instead of silently omitting it.
+
 ## [1.0.0] - 2026-09-01
 
 ### Added

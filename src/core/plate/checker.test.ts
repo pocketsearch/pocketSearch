@@ -121,7 +121,17 @@ describe('PlateChecker (with providers)', () => {
     });
     const report = await checker.check('AB12 CDE');
     expect(report.checks.find((c) => c.id === 'tax')?.status).toBe('fail');
-    expect(report.summary.status).toBe('invalid');
+    expect(report.summary.status).toBe('fail');
+  });
+
+  it('uses "invalid" only for a malformed mark, "fail" for a valid mark with a failed check', async () => {
+    const offline = new PlateChecker({ now: NOW });
+    expect((await offline.check('NOPE!')).summary.status).toBe('invalid');
+    const taxed = new PlateChecker({
+      now: NOW,
+      vehicleProvider: vehicleProvider({ make: 'VW', taxStatus: 'Untaxed' }),
+    });
+    expect((await taxed.check('AB12 CDE')).summary.status).toBe('fail');
   });
 
   it('summarises MOT history and flags mileage anomalies', async () => {

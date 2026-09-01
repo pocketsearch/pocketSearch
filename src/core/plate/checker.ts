@@ -42,7 +42,8 @@ export class PlateChecker {
   }
 
   async check(input: string, options: PlateCheckOptions = {}): Promise<PlateCheck> {
-    const reference = options.referenceDate ? new Date(options.referenceDate) : this.now();
+    const parsedRef = options.referenceDate ? new Date(options.referenceDate) : null;
+    const reference = parsedRef && !Number.isNaN(parsedRef.getTime()) ? parsedRef : this.now();
     const normalized = normalizePlate(input);
     const classification = classifyPlate(normalized);
     const formatted = formatPlate(normalized, classification.format);
@@ -129,29 +130,37 @@ export class PlateChecker {
 
     // 4. DVLA Vehicle Enquiry Service ---------------------------------------
     let vehicle: VehicleRecord | null = null;
-    const wantVehicle = options.includeVehicleData ?? true;
-    if (wantVehicle && classification.valid) {
+    if ((options.includeVehicleData ?? true) && classification.valid) {
       vehicle = await this.runVehicleLookup(normalized, checks, sources, age, reference);
-    } else if (wantVehicle) {
+    } else {
       checks.push({
         id: 'dvla-record',
         label: 'DVLA vehicle record',
         status: 'skipped',
-        detail: 'Skipped — registration is not structurally valid',
+        detail: !classification.valid
+          ? 'Skipped — registration is not structurally valid'
+          : 'Skipped — vehicle data lookup was not requested',
       });
     }
 
     // 5. MOT history -------------------------------------------------------
     let mot: PlateCheck['mot'] = null;
-    const wantMot = options.includeMotHistory ?? true;
-    if (wantMot && classification.valid && this.motProvider) {
+    if (
+      (options.includeMotHistory ?? true) &&
+      classification.valid &&
+      this.motProvider?.configured
+    ) {
       mot = await this.runMotLookup(normalized, checks, sources, reference);
-    } else if (wantMot && !this.motProvider?.configured) {
+    } else {
       checks.push({
         id: 'mot-history',
         label: 'MOT test history',
         status: 'skipped',
-        detail: 'Skipped — DVSA MOT History API credentials are not configured',
+        detail: !classification.valid
+          ? 'Skipped — registration is not structurally valid'
+          : (options.includeMotHistory ?? true)
+            ? 'Skipped — DVSA MOT History API credentials are not configured'
+            : 'Skipped — MOT history lookup was not requested',
       });
     }
 
@@ -168,8 +177,13 @@ export class PlateChecker {
     const pass = checks.filter((c) => c.status === 'pass').length;
     const warn = checks.filter((c) => c.status === 'warn').length;
     const fail = checks.filter((c) => c.status === 'fail').length;
-    const status: PlateCheck['summary']['status'] =
-      fail > 0 ? 'invalid' : warn > 0 ? 'attention' : 'ok';
+    const status: PlateCheck['summary']['status'] = !classification.valid
+      ? 'invalid'
+      : fail > 0
+        ? 'fail'
+        : warn > 0
+          ? 'attention'
+          : 'ok';
 
     return {
       input,

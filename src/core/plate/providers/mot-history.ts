@@ -69,7 +69,7 @@ export class MotHistoryProvider implements MotProvider {
     );
   }
 
-  private async accessToken(): Promise<string> {
+  private async accessToken(signal: AbortSignal): Promise<string> {
     if (this.token && this.token.expiresAt > Date.now() + 30_000) return this.token.value;
     const body = new URLSearchParams({
       grant_type: 'client_credentials',
@@ -81,6 +81,7 @@ export class MotHistoryProvider implements MotProvider {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
+      signal,
     });
     if (!response.ok) throw new Error(`token endpoint returned HTTP ${response.status}`);
     const json = (await response.json()) as { access_token: string; expires_in?: number };
@@ -100,7 +101,7 @@ export class MotHistoryProvider implements MotProvider {
     signal?.addEventListener('abort', onAbort, { once: true });
 
     try {
-      const token = await this.accessToken();
+      const token = await this.accessToken(controller.signal);
       const response = await this.cfg.fetchImpl(
         `${this.cfg.baseUrl}/${encodeURIComponent(normalizedPlate)}`,
         {
@@ -161,6 +162,11 @@ function summarise(vehicle: MotApiVehicle, source: string): MotSummary {
   }
 
   const latest = chronological[chronological.length - 1];
+  // The trade API has no vehicle-level expiry; use the newest passed test's.
+  const latestPassedExpiry = [...chronological]
+    .reverse()
+    .find((t) => t.testResult?.toUpperCase() === 'PASSED' && t.expiryDate)?.expiryDate;
+
   return {
     registration: vehicle.registration,
     make: vehicle.make,
@@ -168,7 +174,7 @@ function summarise(vehicle: MotApiVehicle, source: string): MotSummary {
     firstUsedDate: vehicle.firstUsedDate,
     fuelType: vehicle.fuelType,
     primaryColour: vehicle.primaryColour,
-    motTestExpiryDate: vehicle.motTestExpiryDate,
+    motTestExpiryDate: vehicle.motTestExpiryDate ?? latestPassedExpiry,
     totalTests: tests.length,
     passed: tests.filter((t) => t.testResult?.toUpperCase() === 'PASSED').length,
     failed: tests.filter((t) => t.testResult?.toUpperCase() === 'FAILED').length,

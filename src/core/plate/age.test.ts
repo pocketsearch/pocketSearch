@@ -47,8 +47,17 @@ describe('decodePrefixAge / decodeSuffixAge', () => {
     expect(decodeSuffixAge('N', REF)?.registeredFrom).toBe('1974-08-01');
   });
 
+  it('handles the six-monthly prefix changeover (1999–2001)', () => {
+    // Simple "1983 + index" maths would wrongly place these in 2002/2003.
+    expect(decodePrefixAge('T', REF)?.approxYear).toBe(1999);
+    expect(decodePrefixAge('V', REF)?.registeredFrom).toBe('1999-09-01');
+    expect(decodePrefixAge('Y', REF)?.approxYear).toBe(2001);
+    expect(decodePrefixAge('Y', REF)?.registeredTo).toBe('2001-08-31');
+  });
+
   it('rejects illegal year letters', () => {
     expect(decodePrefixAge('I', REF)).toBeNull();
     expect(decodeSuffixAge('Z', REF)).toBeNull();
+    expect(decodePrefixAge('Z', REF)).toBeNull();
   });
 });

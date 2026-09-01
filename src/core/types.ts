@@ -1,5 +1,32 @@
 import { z } from 'zod';
 
+const FALSEY = new Set(['false', '0', 'no', 'off', '']);
+
+/**
+ * A boolean that also accepts query-string values. `z.coerce.boolean()` is unsafe
+ * here: `Boolean("false") === true`, so `?flag=false` would not disable anything.
+ */
+export function booleanParam(defaultValue: boolean) {
+  return z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined) return defaultValue;
+      if (typeof v === 'boolean') return v;
+      return !FALSEY.has(v.trim().toLowerCase());
+    });
+}
+
+/** Like {@link booleanParam} but stays `undefined` when the value is absent. */
+export const optionalBooleanParam = z
+  .union([z.boolean(), z.string()])
+  .optional()
+  .transform((v) => {
+    if (v === undefined) return undefined;
+    if (typeof v === 'boolean') return v;
+    return !FALSEY.has(v.trim().toLowerCase());
+  });
+
 /** A document stored in the Beacon Search index. */
 export interface BeaconDocument {
   id: string;
@@ -37,15 +64,15 @@ export const searchQuerySchema = z.object({
     .transform((v) => (v === undefined ? [] : Array.isArray(v) ? v : [v]))
     .pipe(z.array(z.string().trim().min(1)).max(32)),
   source: z.string().trim().min(1).max(256).optional(),
-  fuzzy: z.coerce.boolean().default(true),
-  prefix: z.coerce.boolean().default(true),
+  fuzzy: booleanParam(true),
+  prefix: booleanParam(true),
 });
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 
 export const crawlInputSchema = z.object({
   url: z.string().trim().url(),
   maxPages: z.coerce.number().int().min(1).max(2000).optional(),
-  sameOriginOnly: z.coerce.boolean().default(true),
+  sameOriginOnly: booleanParam(true),
   tags: z.array(z.string().trim().min(1).max(128)).max(32).default([]),
 });
 export type CrawlInput = z.infer<typeof crawlInputSchema>;

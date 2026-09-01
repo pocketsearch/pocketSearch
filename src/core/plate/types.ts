@@ -108,7 +108,13 @@ export interface PlateCheck {
   mot: MotSummary | null;
   checks: CheckItem[];
   summary: {
-    status: 'ok' | 'attention' | 'invalid';
+    /**
+     * `invalid` — not a valid UK registration mark.
+     * `fail` — valid mark, but a check failed (e.g. untaxed, MOT expired).
+     * `attention` — valid mark with warnings only.
+     * `ok` — valid mark, everything passed.
+     */
+    status: 'ok' | 'attention' | 'fail' | 'invalid';
     headline: string;
     pass: number;
     warn: number;
