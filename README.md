@@ -5,6 +5,7 @@ No database, no external services — the index lives in memory and is persisted
 single JSON file. Runs anywhere Node.js 20+ runs, or as a Docker container.
 
 - **Full-text search** with prefix + fuzzy matching, title/tag boosting, tag facets and highlighted snippets (powered by [MiniSearch](https://github.com/lucaong/minisearch)).
+- **Answer weave** — question-like queries also get a short written answer built _only_ from retrieved sources (index pages + optional live web search), with per-sentence citations, domain trust tiers, retrieval timestamps and a confidence banner. Works offline as a deterministic weave; upgrades to prose with an LLM key.
 - **UK number plate checker** with automatic backend checks — format, age identifier, DVLA region, and (with free API keys) DVLA tax/MOT status and DVSA MOT history.
 - **MCP server** (`beacon-mcp`, built on [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)) exposing the plate checker and the index as tools for Claude & other MCP clients.
 - **REST API** built on [Fastify](https://fastify.dev/) with schema validation.
@@ -86,6 +87,7 @@ available as `beacon`.
 | `GET`    | `/api/health`         | Liveness + document count                            |
 | `GET`    | `/api/stats`          | Index statistics, top tags/sources                   |
 | `GET`    | `/api/search`         | `?q=&limit=&offset=&tags=&source=&fuzzy=&prefix=`    |
+| `GET`    | `/api/answer`         | Woven, cited answer for a query (`?q=&fresh=`)       |
 | `GET`    | `/api/documents`      | List documents (`?limit=&offset=`)                   |
 | `GET`    | `/api/documents/:id`  | Fetch one document                                   |
 | `POST`   | `/api/documents`      | Create/replace a document                            |
@@ -149,6 +151,32 @@ curl 'http://localhost:7700/api/plate/AB12CDE?vehicle=false&mot=false'
 
 Set `BEACON_PLATE_INDEX_RESULTS=true` (or pass `index=true`) to save every check
 into the search index as a `plate-check` document — so past checks are searchable.
+
+---
+
+## Answer weave
+
+`GET /api/answer?q=…` (and the Search tab, automatically, for question-like
+queries) returns a short written answer assembled **only** from retrieved
+sources:
+
+1. **Retrieve** — matching pages from the local index, plus — when
+   `BEACON_ANSWER_WEB_SEARCH` names a provider — live web results fetched at
+   query time through the same `robots.txt` / SSRF-guard / timeout stack the
+   crawler uses.
+2. **Ground** — the sentences that best answer the query are extracted and tied
+   to the source they came from.
+3. **Weave** — those grounded sentences are written into prose by an LLM
+   (`ANTHROPIC_API_KEY`, or any OpenAI-compatible endpoint). With no LLM key the
+   deterministic weave of the extracts is returned instead.
+4. **Attribute** — every sentence carries `[n]` citation markers; each source
+   gets a trust tier (`official` / `established` / `community` / `unverified`),
+   a retrieval timestamp, and a one-line reason. Statements that can't be tied
+   to a source are labelled `unverified`, and a confidence banner
+   (`high` / `medium` / `low` / `none`) summarises the whole answer.
+
+Everything is optional — see [`docs/answers.md`](docs/answers.md) for the trust
+tiers and confidence rubric, and [`.env.example`](.env.example) for the knobs.
 
 ---
 

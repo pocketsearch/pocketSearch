@@ -11,4 +11,5 @@ data/
 .DS_Store
 .idea/
 .vscode/
+.codex/
 *.tmp

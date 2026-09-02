@@ -3,6 +3,7 @@ import path from 'node:path';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import { createAnswerService } from '../core/answer/index.js';
 import type { Config } from '../core/config.js';
 import { createLogger, type Logger } from '../core/logger.js';
 import { createPlateChecker } from '../core/plate/index.js';
@@ -54,7 +55,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   registerErrorHandler(app);
   await app.register(cors, { origin: config.corsOrigin });
 
-  const ctx: RouteContext = { config, engine, plateChecker: createPlateChecker(config) };
+  const ctx: RouteContext = {
+    config,
+    engine,
+    plateChecker: createPlateChecker(config),
+    answerService: createAnswerService(config, { engine, logger }),
+  };
   await app.register(apiRoutes(ctx), { prefix: '/api' });
 
   // Back-compat / convenience alias so `/health` works without the prefix.

@@ -1,11 +1,13 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { AnswerBusyError, type AnswerService } from '../core/answer/index.js';
 import type { Config } from '../core/config.js';
 import { crawl } from '../core/crawler.js';
 import type { PlateChecker } from '../core/plate/checker.js';
 import { plateCheckToDocument } from '../core/plate/index.js';
 import type { PersistentEngine } from '../core/store.js';
 import {
+  answerQuerySchema,
   booleanParam,
   bulkInputSchema,
   crawlInputSchema,
@@ -29,15 +31,21 @@ export interface RouteContext {
   config: Config;
   engine: PersistentEngine;
   plateChecker: PlateChecker;
+  answerService: AnswerService | null;
 }
 
 /** Canonical `/health` body, used by both `/health` and `/api/health`. */
-export function healthPayload(ctx: Pick<RouteContext, 'engine' | 'plateChecker'>) {
+export function healthPayload(
+  ctx: Pick<RouteContext, 'engine' | 'plateChecker' | 'answerService'>,
+) {
   return {
     status: 'ok' as const,
     documents: ctx.engine.size,
     uptimeSeconds: Math.round(process.uptime()),
     plateChecks: ctx.plateChecker.capabilities,
+    answer: ctx.answerService
+      ? ctx.answerService.capabilities
+      : { enabled: false as const, webSearch: null, llm: [] as string[] },
   };
 }
 
@@ -60,7 +68,12 @@ export function registerErrorHandler(app: FastifyInstance): void {
       });
       return;
     }
-    const codeFor = (status: number) => (status === 404 ? 'not_found' : 'request_error');
+    const codeFor = (status: number) =>
+      status === 404 ? 'not_found' : status === 429 ? 'rate_limited' : 'request_error';
+    if (error instanceof AnswerBusyError) {
+      reply.status(429).send({ error: 'rate_limited', message: error.message });
+      return;
+    }
     if (error instanceof HttpError) {
       reply
         .status(error.statusCode)
@@ -89,6 +102,12 @@ export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
     app.get('/search', async (request) => {
       const query = searchQuerySchema.parse(request.query);
       return engine.search(query);
+    });
+
+    app.get('/answer', async (request) => {
+      if (!ctx.answerService) throw new HttpError(404, 'answer synthesis is disabled');
+      const { q, fresh } = answerQuerySchema.parse(request.query);
+      return ctx.answerService.answer(q, { fresh });
     });
 
     app.get('/documents', async (request) => {

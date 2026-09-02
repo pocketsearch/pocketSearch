@@ -8,6 +8,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Answer weave** (`src/core/answer/`): `GET /api/answer?q=` and the Search tab
+  return a short written answer for question-like queries, assembled only from
+  retrieved sources. Retrieval combines the local index with optional live web
+  search (`brave` / `tavily` / `searxng`), fetching each result through the
+  crawler's `robots.txt` / SSRF-guard / timeout stack. Grounded sentences are
+  woven into prose by an optional LLM (`ANTHROPIC_API_KEY`, or any
+  OpenAI-compatible endpoint) and fall back to a deterministic weave otherwise.
+  Every sentence is citation-checked; each source carries a trust tier, a
+  retrieval timestamp and a reason, and an overall confidence banner is
+  computed. See `docs/answers.md`. All configuration is optional.
+- `src/core/readable.ts`: `fetchHtml` + `extractReadable`, the HTML-to-text
+  helpers extracted from the crawler and now shared with answer retrieval.
+- `SearchEngine.search` accepts an optional `{ combineWith: 'AND' | 'OR' }`.
+
 - **UK number plate checker** (`src/core/plate/`): offline format classification
   (current / prefix / suffix / Northern Ireland / dateless), age-identifier
   decoding to a registration date range, and DVLA memory-tag → region/office

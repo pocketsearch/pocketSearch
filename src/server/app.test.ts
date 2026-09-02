@@ -40,8 +40,56 @@ describe('HTTP API', () => {
       status: 'ok',
       documents: 0,
       plateChecks: expect.any(Object),
+      answer: { enabled: true, webSearch: null, llm: [] },
     });
     expect(Object.keys(bare.json()).sort()).toEqual(Object.keys(api.json()).sort());
+  });
+
+  it('weaves an answer from the local index and cites its sources', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/documents',
+      payload: {
+        title: 'Fastify',
+        body: 'Fastify is a fast and low-overhead web framework for Node.js. It focuses on developer experience and schema-based validation.',
+        tags: [],
+        url: 'https://fastify.dev/',
+      },
+    });
+
+    const bad = await app.inject({ method: 'GET', url: '/api/answer?q=a' });
+    expect(bad.statusCode).toBe(400);
+
+    const res = await app.inject({ method: 'GET', url: '/api/answer?q=what%20is%20fastify' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.synthesizer).toBe('extractive');
+    expect(body.answer.length).toBeGreaterThan(0);
+    expect(body.sources[0].url).toBe('https://fastify.dev/');
+    expect(['high', 'medium', 'low', 'none']).toContain(body.confidence);
+    expect(body.warnings.join(' ')).toContain('web search is not configured');
+  });
+
+  it('returns 404 for /api/answer when answer synthesis is disabled', async () => {
+    const config = loadConfig({
+      indexFile: path.join(dir, 'index2.json'),
+      webDir: path.join(dir, 'nonexistent-web'),
+      logLevel: 'silent',
+      persistDebounceMs: 0,
+      answer: { enabled: false },
+    });
+    const engine = new PersistentEngine({ indexFile: config.indexFile, debounceMs: 0 });
+    await engine.load();
+    const disabled = await buildApp({ config, engine });
+    await disabled.ready();
+    try {
+      const res = await disabled.inject({ method: 'GET', url: '/api/answer?q=anything here' });
+      expect(res.statusCode).toBe(404);
+      const health = await disabled.inject({ method: 'GET', url: '/api/health' });
+      expect(health.json().answer).toEqual({ enabled: false, webSearch: null, llm: [] });
+    } finally {
+      await disabled.close();
+    }
   });
 
   it('returns error:"not_found" for both unknown routes and missing resources', async () => {

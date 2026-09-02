@@ -69,6 +69,13 @@ export const searchQuerySchema = z.object({
 });
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 
+export const answerQuerySchema = z.object({
+  q: z.string().trim().min(2).max(1024),
+  /** Bypass the short-lived answer cache. */
+  fresh: booleanParam(false),
+});
+export type AnswerQuery = z.infer<typeof answerQuerySchema>;
+
 export const crawlInputSchema = z.object({
   url: z.string().trim().url(),
   maxPages: z.coerce.number().int().min(1).max(2000).optional(),
