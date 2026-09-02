@@ -3,8 +3,33 @@
 // erased at build time — the web bundle never pulls in backend code.
 import type { BeaconDocument, IndexStats, SearchHit, SearchResponse } from '@core/types';
 import type { PlateCheck } from '@core/plate/types';
+import type {
+  AnswerClaim,
+  AnswerConfidence,
+  AnswerResponse,
+  AnswerSource,
+  TrustTier,
+} from '@core/answer/types';
 
-export type { BeaconDocument, IndexStats, PlateCheck, SearchHit, SearchResponse };
+export type {
+  AnswerClaim,
+  AnswerConfidence,
+  AnswerResponse,
+  AnswerSource,
+  BeaconDocument,
+  IndexStats,
+  PlateCheck,
+  SearchHit,
+  SearchResponse,
+  TrustTier,
+};
+
+export interface HealthResponse {
+  status: 'ok';
+  documents: number;
+  uptimeSeconds: number;
+  answer: { enabled: boolean; webSearch: string | null; llm: string[] };
+}
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
@@ -45,6 +70,14 @@ export const api = {
   },
   stats(): Promise<IndexStats> {
     return request<IndexStats>('/api/stats');
+  },
+  health(): Promise<HealthResponse> {
+    return request<HealthResponse>('/api/health');
+  },
+  answer(q: string, fresh: boolean, signal?: AbortSignal): Promise<AnswerResponse> {
+    const qs = new URLSearchParams({ q });
+    if (fresh) qs.set('fresh', 'true');
+    return request<AnswerResponse>(`/api/answer?${qs.toString()}`, { signal });
   },
   addDocument(doc: {
     title: string;

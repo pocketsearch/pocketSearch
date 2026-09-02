@@ -18,6 +18,34 @@ export interface Config {
   crawlAllowPrivateHosts: boolean;
   maxBodyBytes: number;
   plate: PlateConfig;
+  answer: AnswerConfig;
+}
+
+export interface AnswerConfig {
+  /** Master switch for the answer-weave layer and `GET /api/answer`. */
+  enabled: boolean;
+  /** Whether the web UI auto-answers question-like queries. */
+  autoAnswer: boolean;
+  anthropicApiKey?: string;
+  anthropicModel: string;
+  openaiApiKey?: string;
+  openaiBaseUrl: string;
+  openaiModel?: string;
+  /** Which web-search provider to use, if any. */
+  webSearch?: 'brave' | 'tavily' | 'searxng';
+  braveApiKey?: string;
+  tavilyApiKey?: string;
+  searxngUrl?: string;
+  /** Maximum number of sources gathered per answer. */
+  maxSources: number;
+  /** Per-request timeout for fetching a source page / web search (ms). */
+  fetchTimeoutMs: number;
+  /** Timeout for the LLM synthesis call (ms). */
+  llmTimeoutMs: number;
+  /** Extra domains promoted to the `official` trust tier. */
+  trustedDomains: string[];
+  /** Allow fetching sources on loopback / private hosts (SSRF guard). */
+  allowPrivateHosts: boolean;
 }
 
 export interface PlateConfig {
@@ -66,8 +94,27 @@ function readOptional(name: string): string | undefined {
   return raw === undefined || raw.trim() === '' ? undefined : raw.trim();
 }
 
-export interface ConfigOverrides extends Partial<Omit<Config, 'plate'>> {
+export interface ConfigOverrides extends Partial<Omit<Config, 'plate' | 'answer'>> {
   plate?: Partial<PlateConfig>;
+  answer?: Partial<AnswerConfig>;
+}
+
+const WEB_SEARCH_PROVIDERS = ['brave', 'tavily', 'searxng'] as const;
+
+function readWebSearchProvider(): AnswerConfig['webSearch'] {
+  const raw = readOptional('ANSWER_WEB_SEARCH')?.toLowerCase();
+  return (WEB_SEARCH_PROVIDERS as readonly string[]).includes(raw ?? '')
+    ? (raw as AnswerConfig['webSearch'])
+    : undefined;
+}
+
+function readList(name: string): string[] {
+  const raw = readOptional(name);
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 /**
@@ -111,9 +158,35 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
       timeoutMs: readInt('BEACON_PLATE_TIMEOUT_MS', 12_000),
       indexResults: readBool('BEACON_PLATE_INDEX_RESULTS', false),
     },
+    answer: {
+      enabled: readBool('BEACON_ANSWER_ENABLED', true),
+      autoAnswer: readBool('BEACON_ANSWER_AUTO', true),
+      anthropicApiKey: readOptional('ANTHROPIC_API_KEY'),
+      anthropicModel: readString('BEACON_ANSWER_ANTHROPIC_MODEL', 'claude-opus-5'),
+      openaiApiKey: readOptional('OPENAI_API_KEY'),
+      openaiBaseUrl:
+        readOptional('OPENAI_BASE_URL') ??
+        readOptional('ANSWER_OPENAI_BASE_URL') ??
+        'https://api.openai.com/v1',
+      openaiModel: readOptional('ANSWER_OPENAI_MODEL'),
+      webSearch: readWebSearchProvider(),
+      braveApiKey: readOptional('BRAVE_SEARCH_API_KEY'),
+      tavilyApiKey: readOptional('TAVILY_API_KEY'),
+      searxngUrl: readOptional('SEARXNG_URL'),
+      maxSources: readInt('BEACON_ANSWER_MAX_SOURCES', 8),
+      fetchTimeoutMs: readInt('BEACON_ANSWER_FETCH_TIMEOUT_MS', 8_000),
+      llmTimeoutMs: readInt('BEACON_ANSWER_LLM_TIMEOUT_MS', 30_000),
+      trustedDomains: readList('ANSWER_TRUSTED_DOMAINS'),
+      allowPrivateHosts: readBool('BEACON_ANSWER_ALLOW_PRIVATE', false),
+    },
   };
 
-  // `plate` is merged rather than replaced so callers can override a single
-  // nested field without having to restate the whole PlateConfig.
-  return { ...base, ...overrides, plate: { ...base.plate, ...overrides.plate } };
+  // `plate` / `answer` are merged rather than replaced so callers can override a
+  // single nested field without restating the whole sub-config.
+  return {
+    ...base,
+    ...overrides,
+    plate: { ...base.plate, ...overrides.plate },
+    answer: { ...base.answer, ...overrides.answer },
+  };
 }

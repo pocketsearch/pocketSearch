@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, type IndexStats, type PlateCheck, type SearchResponse } from './api';
+import {
+  api,
+  type AnswerConfidence,
+  type AnswerResponse,
+  type HealthResponse,
+  type IndexStats,
+  type PlateCheck,
+  type SearchResponse,
+  type TrustTier,
+} from './api';
 
 type Tab = 'search' | 'plate' | 'add' | 'crawl' | 'about';
 
@@ -12,6 +21,78 @@ function useDebounced<T>(value: T, delayMs: number): T {
     return () => clearTimeout(timer);
   }, [value, delayMs]);
   return debounced;
+}
+
+const QUESTION_STARTS =
+  /^(who|what|whats|when|where|why|how|is|are|was|were|does|do|did|can|could|should|would|will|which|whom|whose|define|explain|tell)\b/i;
+
+/** Heuristic: does this query read like a question worth auto-answering? */
+function isQuestionLike(q: string): boolean {
+  const t = q.trim();
+  if (t.length < 8) return false;
+  if (t.includes('?')) return true;
+  if (QUESTION_STARTS.test(t)) return true;
+  return t.split(/\s+/).length >= 4;
+}
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'unknown';
+  const secs = Math.max(1, Math.round((Date.now() - then) / 1000));
+  for (const [size, label] of [
+    [86400, 'd'],
+    [3600, 'h'],
+    [60, 'm'],
+  ] as Array<[number, string]>) {
+    if (secs >= size) return `${Math.floor(secs / size)}${label} ago`;
+  }
+  return `${secs}s ago`;
+}
+
+function stripCitations(text: string): string {
+  return text.replace(/\s*\[\d+\]/g, '').trim();
+}
+
+const TRUST_LABEL: Record<TrustTier, string> = {
+  official: 'official',
+  established: 'established',
+  community: 'unverified reliability',
+  unverified: 'unverified',
+};
+
+/** ASCII-style radial dot burst — the "beacon". Pure SVG, inherits color. */
+function Beacon({ size = 200 }: { size?: number }): JSX.Element {
+  const c = size / 2;
+  const maxR = c - size * 0.03;
+  const step = size * 0.056;
+  const dots: JSX.Element[] = [];
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * Math.PI * 2;
+    const reach = i % 4 === 0 ? maxR : maxR * 0.6;
+    for (let r = size * 0.06; r <= reach + 0.01; r += step) {
+      dots.push(
+        <circle
+          key={`${i}-${r.toFixed(1)}`}
+          cx={c + Math.cos(angle) * r}
+          cy={c + Math.sin(angle) * r}
+          r={r < maxR * 0.32 ? size * 0.013 : size * 0.009}
+        />,
+      );
+    }
+  }
+  return (
+    <svg
+      className="beacon"
+      viewBox={`0 0 ${size} ${size}`}
+      width={size}
+      height={size}
+      role="img"
+      aria-label="Beacon"
+    >
+      {dots}
+      <circle cx={c} cy={c} r={size * 0.02} />
+    </svg>
+  );
 }
 
 export function App(): JSX.Element {
@@ -31,13 +112,9 @@ export function App(): JSX.Element {
     <div className="app">
       <header className="app__header">
         <div className="brand">
-          <span className="brand__mark" aria-hidden>
-            🔦
-          </span>
-          <div>
-            <h1>Beacon Search</h1>
-            <p>Self-hostable open-source full-text search</p>
-          </div>
+          <Beacon size={40} />
+          <h1>ABEACON</h1>
+          <p>self-hostable full-text search</p>
         </div>
         <nav className="tabs" aria-label="Sections">
           {(
@@ -94,7 +171,55 @@ function SearchView(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const query = useDebounced(input, 200);
+  const answerQuery = useDebounced(input.trim(), 900);
   const abortRef = useRef<AbortController | null>(null);
+
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const answersEnabled = health?.answer.enabled ?? false;
+  const [answer, setAnswer] = useState<AnswerResponse | null>(null);
+  const [answerLoading, setAnswerLoading] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
+  const [answerRequested, setAnswerRequested] = useState(false);
+  const answerAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api
+      .health()
+      .then(setHealth)
+      .catch(() => setHealth(null));
+  }, []);
+
+  const runAnswer = useCallback((q: string, fresh: boolean) => {
+    answerAbort.current?.abort();
+    const controller = new AbortController();
+    answerAbort.current = controller;
+    setAnswerRequested(true);
+    setAnswerLoading(true);
+    setAnswerError(null);
+    api
+      .answer(q, fresh, controller.signal)
+      .then((res) => {
+        setAnswer(res);
+        setAnswerError(null);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setAnswerError(err instanceof Error ? err.message : 'Answer failed');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setAnswerLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    answerAbort.current?.abort();
+    setAnswer(null);
+    setAnswerError(null);
+    setAnswerRequested(false);
+    setAnswerLoading(false);
+    if (!answersEnabled || !answerQuery) return;
+    if (isQuestionLike(answerQuery)) runAnswer(answerQuery, false);
+  }, [answerQuery, answersEnabled, runAnswer]);
 
   useEffect(() => {
     setPage(0);
@@ -141,14 +266,10 @@ function SearchView(): JSX.Element {
   return (
     <section className="search">
       <div className="search__box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" strokeLinecap="round" />
-        </svg>
         <input
           type="search"
           autoFocus
-          placeholder="Search the index…"
+          placeholder="search the index"
           value={input}
           onChange={(event) => setInput(event.target.value)}
           aria-label="Search query"
@@ -160,7 +281,7 @@ function SearchView(): JSX.Element {
             onClick={() => setInput('')}
             aria-label="Clear search"
           >
-            ✕
+            clear
           </button>
         )}
       </div>
@@ -181,6 +302,24 @@ function SearchView(): JSX.Element {
       )}
 
       {error && <p className="notice notice--error">{error}</p>}
+
+      {answersEnabled && answerQuery && !answerRequested && (
+        <button type="button" className="answer__cta" onClick={() => runAnswer(answerQuery, false)}>
+          ↳ weave an answer for “{answerQuery}”
+        </button>
+      )}
+
+      {answerError && answerRequested && (
+        <p className="notice notice--error">answer: {answerError}</p>
+      )}
+
+      {answerRequested && (answer || answerLoading) && (
+        <AnswerCard
+          data={answer}
+          loading={answerLoading}
+          onRefresh={() => runAnswer(answerQuery || query, true)}
+        />
+      )}
 
       {result && (
         <p className="search__meta">
@@ -244,14 +383,20 @@ function SearchView(): JSX.Element {
 
       {result && result.total === 0 && !loading && (
         <div className="empty">
-          <span className="empty__icon" aria-hidden>
-            {query ? '🔍' : '🔦'}
-          </span>
-          <strong>{query ? 'No documents matched' : 'Your index is ready'}</strong>
+          <Beacon size={150} />
+          <strong>{query ? 'no documents matched' : 'index ready'}</strong>
           <span>
             {query
-              ? 'Try a different query, or loosen the active tag filters.'
-              : 'Start typing to search, or use Add document / Crawl site to fill the index.'}
+              ? 'Nothing in the index matched. Try a different query, or clear the active tag filters.'
+              : 'Type to search, or use Add / Crawl to fill the index.'}
+          </span>
+          {query && answersEnabled && !answerRequested && (
+            <button type="button" className="answer__cta" onClick={() => runAnswer(query, false)}>
+              ↳ weave an answer from live sources instead
+            </button>
+          )}
+          <span className="empty__dots" aria-hidden>
+            . . . . . . .
           </span>
         </div>
       )}
@@ -272,6 +417,119 @@ function SearchView(): JSX.Element {
             Next →
           </button>
         </div>
+      )}
+    </section>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence: AnswerConfidence }): JSX.Element {
+  const cls =
+    confidence === 'high' || confidence === 'medium'
+      ? 'badge badge--ok'
+      : confidence === 'low'
+        ? 'badge badge--warn'
+        : 'badge badge--fail';
+  return <span className={cls}>{confidence} confidence</span>;
+}
+
+function AnswerCard({
+  data,
+  loading,
+  onRefresh,
+}: {
+  data: AnswerResponse | null;
+  loading: boolean;
+  onRefresh: () => void;
+}): JSX.Element {
+  return (
+    <section className="answer" aria-busy={loading}>
+      <div className="answer__head">
+        <span className="answer__tag">ANSWER</span>
+        {data && <ConfidenceBadge confidence={data.confidence} />}
+        {loading && <span className="search__updating" aria-hidden />}
+        <span className="answer__spacer" />
+        {data && (
+          <button type="button" className="answer__refresh" onClick={onRefresh}>
+            re-run
+          </button>
+        )}
+      </div>
+
+      {!data && loading && <p className="answer__body answer__body--wait">weaving an answer…</p>}
+
+      {data && (
+        <>
+          <p className="answer__reason">{data.confidenceReason}</p>
+
+          {data.claims.length > 0 ? (
+            <p className="answer__body">
+              {data.claims.map((claim, i) => (
+                <span key={i} className={claim.supported ? 'claim' : 'claim claim--unverified'}>
+                  {stripCitations(claim.text)}{' '}
+                  {claim.sourceIds.map((id) => (
+                    <a key={id} href={`#answer-src-${id}`} className="cite">
+                      [{id}]
+                    </a>
+                  ))}
+                  {!claim.supported && <span className="claim__flag">unverified</span>}{' '}
+                </span>
+              ))}
+            </p>
+          ) : (
+            <p className="answer__body">{data.answer}</p>
+          )}
+
+          {data.disclaimer && <p className="answer__disclaimer">⚠ {data.disclaimer}</p>}
+
+          {data.sources.length > 0 && (
+            <ol className="answer__sources">
+              {data.sources.map((source) => (
+                <li key={source.id} id={`answer-src-${source.id}`} className="answer__source">
+                  <div className="answer__source-head">
+                    <span className="answer__source-n">[{source.id}]</span>
+                    {source.url ? (
+                      <a href={source.url} target="_blank" rel="noreferrer">
+                        {source.title}
+                      </a>
+                    ) : (
+                      <span>{source.title}</span>
+                    )}
+                  </div>
+                  <div className="answer__source-meta">
+                    <span className={`trust trust--${source.trust}`}>
+                      {TRUST_LABEL[source.trust]}
+                    </span>
+                    {source.domain && <span>{source.domain}</span>}
+                    <span>
+                      {source.live ? 'fetched ' : 'indexed '}
+                      {relativeTime(source.retrievedAt)}
+                    </span>
+                  </div>
+                  <div className="answer__source-why">{source.trustReason}</div>
+                  <p className="answer__quote">“{source.quote}”</p>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {data.warnings.length > 0 && (
+            <ul className="answer__warnings">
+              {data.warnings.map((warning, i) => (
+                <li key={i}>{warning}</li>
+              ))}
+            </ul>
+          )}
+
+          <p className="answer__foot">
+            {data.synthesizer === 'extractive'
+              ? 'assembled from source extracts (no LLM configured)'
+              : `woven by ${data.synthesizer.replace('llm-', '')}`}
+            {' · '}
+            {data.sources.length} source{data.sources.length === 1 ? '' : 's'}
+            {' · '}
+            {Math.round(data.tookMs)} ms{data.cached ? ' · cached' : ''}
+          </p>
+        </>
       )}
     </section>
   );
@@ -425,11 +683,11 @@ function CrawlView({ onDone }: { onDone: () => void }): JSX.Element {
 }
 
 const STATUS_ICON: Record<string, string> = {
-  pass: '✔',
-  warn: '▲',
-  fail: '✘',
-  info: 'ℹ',
-  skipped: '·',
+  pass: '[ ok ]',
+  warn: '[warn]',
+  fail: '[fail]',
+  info: '[info]',
+  skipped: '[skip]',
 };
 
 function PlateView({ onDone }: { onDone: () => void }): JSX.Element {
@@ -547,7 +805,7 @@ function PlateView({ onDone }: { onDone: () => void }): JSX.Element {
             {report.checks.map((check) => (
               <li key={check.id} className={`checks__item checks__item--${check.status}`}>
                 <span className="checks__icon" aria-hidden>
-                  {STATUS_ICON[check.status] ?? '•'}
+                  {STATUS_ICON[check.status] ?? '[ -- ]'}
                 </span>
                 <span className="checks__label">{check.label}</span>
                 <span className="checks__detail">{check.detail}</span>
@@ -610,7 +868,22 @@ function AboutView(): JSX.Element {
         <li>
           <code>GET /api/plate/:reg</code> · <code>POST /api/plate/check</code>
         </li>
+        <li>
+          <code>GET /api/answer?q=…</code>
+        </li>
       </ul>
+      <h3>Answers</h3>
+      <p>
+        For question-like queries the <em>Search</em> tab also weaves a short written answer. It is
+        built only from retrieved material — pages in the index plus, when a web-search provider is
+        configured, live pages fetched at query time through the same robots / SSRF-guarded stack
+        the crawler uses. Every sentence is tied to a numbered source; each source carries a trust
+        tier (official / established / unverified reliability) and a fetch or index timestamp.
+        Anything the sources do not support is labelled <em>unverified</em>, and a confidence banner
+        summarises how well-grounded the answer is. With no LLM configured the answer is a
+        deterministic weave of source extracts; with <code>ANTHROPIC_API_KEY</code> (or an
+        OpenAI-compatible endpoint) it is written up in prose. All of it is optional.
+      </p>
       <h3>Number plate checker</h3>
       <p>
         The <em>Plate check</em> tab runs automatic checks on a UK registration: format validation,

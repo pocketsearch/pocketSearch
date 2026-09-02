@@ -1,9 +1,8 @@
 import * as cheerio from 'cheerio';
-import { fetchWithTimeout } from './http.js';
 import type { Logger } from './logger.js';
 import { hostIsPrivate } from './net-guard.js';
+import { extractReadable, fetchHtml } from './readable.js';
 import { fetchRobots, RobotsRules } from './robots.js';
-import { normalizeWhitespace } from './text.js';
 import type { DocumentInput } from './types.js';
 
 export interface CrawlOptions {
@@ -39,42 +38,6 @@ export interface CrawlResult {
 const SKIP_EXTENSION =
   /\.(png|jpe?g|gif|webp|svg|ico|css|js|mjs|json|pdf|zip|gz|tar|mp4|mp3|woff2?|ttf|eot)(\?|#|$)/i;
 
-function extractPage(html: string, url: string, tags: string[]): DocumentInput | null {
-  const $ = cheerio.load(html);
-  $('script, style, noscript, template, svg, iframe').remove();
-  // Ensure block-level elements are separated by whitespace in the text dump.
-  $('h1, h2, h3, h4, h5, h6, p, li, br, div, section, article, header, footer, tr, td, th').append(
-    ' ',
-  );
-
-  const title =
-    normalizeWhitespace($('meta[property="og:title"]').attr('content') ?? '') ||
-    normalizeWhitespace($('title').first().text()) ||
-    normalizeWhitespace($('h1').first().text()) ||
-    url;
-
-  const main = $('main').first();
-  const scope = main.length > 0 ? main : $('body');
-  const body = normalizeWhitespace(scope.text());
-  if (body.length === 0 && title === url) return null;
-
-  const host = (() => {
-    try {
-      return new URL(url).host;
-    } catch {
-      return undefined;
-    }
-  })();
-
-  return {
-    title: title.slice(0, 1024),
-    body,
-    url,
-    tags,
-    source: host,
-  };
-}
-
 function collectLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
   const out = new Set<string>();
   $('a[href]').each((_, el) => {
@@ -91,31 +54,6 @@ function collectLinks($: cheerio.CheerioAPI, baseUrl: string): string[] {
     }
   });
   return [...out];
-}
-
-async function fetchText(
-  url: string,
-  userAgent: string,
-  timeoutMs: number,
-  fetchImpl: typeof fetch,
-  parentSignal?: AbortSignal,
-): Promise<{ html: string; finalUrl: string } | { error: string }> {
-  try {
-    const response = await fetchWithTimeout(url, {
-      headers: { 'user-agent': userAgent, accept: 'text/html,application/xhtml+xml' },
-      redirect: 'follow',
-      timeoutMs,
-      fetchImpl,
-      parentSignal,
-    });
-    if (!response.ok) return { error: `HTTP ${response.status}` };
-    const contentType = response.headers.get('content-type') ?? '';
-    if (!contentType.includes('html'))
-      return { error: `unsupported content-type "${contentType}"` };
-    return { html: await response.text(), finalUrl: response.url || url };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
-  }
 }
 
 /**
@@ -179,20 +117,19 @@ export async function crawl(options: CrawlOptions, deps: CrawlDeps = {}): Promis
           return;
         }
 
-        const fetched = await fetchText(
-          pageUrl,
-          options.userAgent,
-          options.timeoutMs,
+        const fetched = await fetchHtml(pageUrl, {
+          userAgent: options.userAgent,
+          timeoutMs: options.timeoutMs,
           fetchImpl,
-          deps.signal,
-        );
+          signal: deps.signal,
+        });
         if ('error' in fetched) {
           result.errors.push({ url: pageUrl, error: fetched.error });
           return;
         }
 
         result.pagesCrawled += 1;
-        const page = extractPage(fetched.html, fetched.finalUrl, options.tags);
+        const page = extractReadable(fetched.html, fetched.finalUrl, options.tags);
         if (page) {
           result.pages.push(page);
           await deps.onPage?.(page);

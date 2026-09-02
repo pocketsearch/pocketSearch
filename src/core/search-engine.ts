@@ -119,7 +119,7 @@ export class SearchEngine {
     this.onChange?.();
   }
 
-  search(query: SearchQuery): SearchResponse {
+  search(query: SearchQuery, options: { combineWith?: 'AND' | 'OR' } = {}): SearchResponse {
     const startedAt = performance.now();
     const q = query.q.trim();
     const queryTerms = tokenize(q);
@@ -134,6 +134,7 @@ export class SearchEngine {
           prefix: query.prefix,
           fuzzy: query.fuzzy ? 0.2 : false,
           boost: { title: 3, tags: 2 },
+          combineWith: options.combineWith ?? 'AND',
         })
         .map((result) => {
           const doc = this.docs.get(String(result.id));
