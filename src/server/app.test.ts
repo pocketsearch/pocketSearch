@@ -257,6 +257,73 @@ describe('HTTP API', () => {
     expect(res.json().discovery.enabled).toBe(true);
     expect(Array.isArray(res.json().discovery.providers)).toBe(true);
   });
+
+  it('reports recon capabilities on /api/health', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.json().recon).toMatchObject({ enabled: true, whois: expect.any(Boolean) });
+  });
+});
+
+describe('recon route', () => {
+  let app: FastifyInstance;
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'beacon-recon-'));
+    const config = loadConfig({
+      indexFile: path.join(dir, 'index.json'),
+      webDir: path.join(dir, 'nonexistent-web'),
+      logLevel: 'silent',
+      persistDebounceMs: 0,
+      recon: { allowPrivateHosts: true, whois: false, timeoutMs: 1000 },
+    });
+    const logger = createLogger(config);
+    const engine = new PersistentEngine({ indexFile: config.indexFile, debounceMs: 0, logger });
+    await engine.load();
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const u = new URL(String(input));
+      if (u.hostname === 'cloudflare-dns.com') {
+        const type = Number(u.searchParams.get('type'));
+        return new Response(
+          JSON.stringify(type === 1 ? { Status: 0, Answer: [{ type: 1, data: '1.1.1.1' }] } : { Status: 0, Answer: [] }),
+        );
+      }
+      if (u.hostname === 'ipwho.is') {
+        return new Response(JSON.stringify({ success: true, ip: '1.1.1.1', type: 'IPv4', country: 'Australia' }));
+      }
+      if (u.hostname === 'crt.sh') return new Response('[]');
+      if (u.hostname === 'rdap.org') return new Response('{}', { status: 404 });
+      return new Response('<html></html>', { status: 200, headers: { server: 'nginx' } });
+    }) as unknown as typeof fetch;
+    app = await buildApp({ config, engine, logger, fetchImpl });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('runs a recon report for a domain target', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/recon?target=example.com&tls=false' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.target).toMatchObject({ kind: 'domain', host: 'example.com' });
+    expect(body.resolvedIps).toContain('1.1.1.1');
+    expect(body.ipGeo[0]).toMatchObject({ country: 'Australia' });
+    expect(Array.isArray(body.findings)).toBe(true);
+  });
+
+  it('rejects a malformed target with 400', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/recon?target=not%20a%20target' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('indexes the report when ?index=1', async () => {
+    await app.inject({ method: 'GET', url: '/api/recon?target=example.com&tls=false&index=1' });
+    const docs = await app.inject({ method: 'GET', url: '/api/documents' });
+    expect(docs.json().documents.some((d: { id: string }) => d.id === 'recon-example-com')).toBe(true);
+  });
 });
 
 describe('HTTP API — the search invariant (?fallback=1)', () => {

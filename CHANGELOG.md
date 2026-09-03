@@ -8,6 +8,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Passive recon** (`src/core/recon/`): profile a domain, IP address, or URL
+  from public data only. `GET /api/recon?target=`, `beacon recon <target>`, a
+  *Recon* tab in the web UI, and the MCP tools `recon_target` / `geolocate_ip`.
+  Checks: DNS over HTTPS (A/AAAA/MX/NS/TXT/CNAME/SOA + SPF + DMARC), RDAP
+  registration data with a system-`whois` fallback, the TLS certificate served on
+  :443, HTTP security-header grade (A–F) and a technology fingerprint, `robots.txt`
+  / `sitemap.xml`, `crt.sh` certificate-transparency subdomains, and IP
+  geolocation (`ipwho.is`, `ipapi.co` fallback). Every check runs in parallel with
+  its own timeout and error isolation; a failure lands in `errors[]` and the rest
+  of the report is still returned. Targets resolving to private / loopback
+  addresses are refused unless `BEACON_RECON_ALLOW_PRIVATE=1` (the CLI always
+  allows them). No API keys. `GET /api/health` reports recon capabilities. See
+  `docs/recon.md`.
+
 - **Discovery cascade** (`src/core/discovery/`): a search-orchestration layer
   that guarantees every non-empty query yields at least one renderable result.
   `GET /api/search?fallback=1` (used by the web UI) runs local index → web

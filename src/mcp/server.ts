@@ -5,6 +5,8 @@ import { decodeAge } from '../core/plate/age.js';
 import { classifyPlate, formatPlate, normalizePlate } from '../core/plate/format.js';
 import { createPlateChecker } from '../core/plate/index.js';
 import { lookupMemoryTag } from '../core/plate/regions.js';
+import { createReconRunner } from '../core/recon/index.js';
+import { geolocateIp } from '../core/recon/ipgeo.js';
 import { BeaconClient } from './beacon-client.js';
 
 export interface BuildMcpServerOptions {
@@ -45,6 +47,7 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   const checker = createPlateChecker(config, fetchImpl);
   // Reuse the checker's provider instances (one MOT OAuth token cache, etc.).
   const { vehicle: vesProvider, mot: motProvider } = checker.providers;
+  const reconRunner = createReconRunner(config, { fetchImpl });
   const beacon = new BeaconClient(beaconApiUrl, fetchImpl);
 
   const server = new McpServer(
@@ -52,8 +55,9 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
     {
       instructions:
         'Tools for UK number-plate analysis (offline format/age/region plus optional ' +
-        'DVLA and DVSA lookups) and for searching / adding documents in a running ' +
-        'Beacon Search instance.',
+        'DVLA and DVSA lookups), passive reconnaissance on a domain / IP / URL (DNS, ' +
+        'RDAP/WHOIS, TLS, security headers, tech fingerprint, robots, crt.sh subdomains, ' +
+        'IP geolocation), and searching / adding documents in a running Beacon Search instance.',
     },
   );
 
@@ -170,6 +174,61 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
         return fail('DVSA MOT History API credentials are not configured');
       const result = await motProvider.lookup(normalizePlate(args.plate));
       return result.ok ? ok(result.data) : fail(result.message ?? result.reason ?? 'lookup failed');
+    },
+  );
+
+  server.registerTool(
+    'recon_target',
+    {
+      title: 'Passive recon on a domain, IP, or URL',
+      description:
+        'Run every passive-recon check for a target: DNS (A/AAAA/MX/NS/TXT + SPF/DMARC), ' +
+        'RDAP/WHOIS registration, the served TLS certificate, HTTP security-header grade and ' +
+        'technology fingerprint, robots.txt / sitemap.xml, crt.sh subdomains, and IP ' +
+        'geolocation. Public sources only — no port scanning or probing. Returns a structured ' +
+        'report with per-check pass/warn/fail findings.',
+      inputSchema: {
+        target: z.string().min(1).max(2048).describe('A domain, IP address, or full URL'),
+        includeRegistration: z.boolean().optional().describe('RDAP/WHOIS lookup (default true)'),
+        includeTls: z.boolean().optional().describe('TLS certificate inspection (default true)'),
+        includeHttp: z.boolean().optional().describe('HTTP header grade + fingerprint (default true)'),
+        includeRobots: z.boolean().optional().describe('robots.txt / sitemap.xml (default true)'),
+        includeSubdomains: z.boolean().optional().describe('crt.sh subdomains (default true)'),
+        includeIpGeo: z.boolean().optional().describe('IP geolocation (default true)'),
+      },
+    },
+    async (args) => {
+      try {
+        const report = await reconRunner.run(args.target, {
+          includeRegistration: args.includeRegistration,
+          includeTls: args.includeTls,
+          includeHttp: args.includeHttp,
+          includeRobots: args.includeRobots,
+          includeSubdomains: args.includeSubdomains,
+          includeIpGeo: args.includeIpGeo,
+        });
+        return ok(report);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+    },
+  );
+
+  server.registerTool(
+    'geolocate_ip',
+    {
+      title: 'Geolocate a public IP address',
+      description:
+        'Resolve country / region / city / ASN / ISP for a public IP address using no-key ' +
+        'providers (ipwho.is, ipapi.co). Private and reserved addresses are refused.',
+      inputSchema: { ip: z.string().min(1).max(64).describe('A public IPv4 or IPv6 address') },
+    },
+    async (args) => {
+      try {
+        return ok(await geolocateIp(args.ip.trim(), { timeoutMs: config.recon.timeoutMs, fetchImpl }));
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
     },
   );
 

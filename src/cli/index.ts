@@ -8,6 +8,8 @@ import { crawl } from '../core/crawler.js';
 import { createLogger } from '../core/logger.js';
 import { createPlateChecker, plateCheckToDocument } from '../core/plate/index.js';
 import type { CheckStatus } from '../core/plate/types.js';
+import { createReconRunner, reconReportToDocument } from '../core/recon/index.js';
+import type { ReconFindingStatus } from '../core/recon/types.js';
 import { PersistentEngine } from '../core/store.js';
 import { documentInputSchema, type DocumentInput } from '../core/types.js';
 import { buildApp } from '../server/app.js';
@@ -248,6 +250,80 @@ program
         process.stdout.write(`  ${icon[item.status]} ${item.label}: ${item.detail}\n`);
       }
       process.stdout.write(`\n  sources: ${check.sources.join(', ')}\n`);
+    },
+  );
+
+program
+  .command('recon <target>')
+  .description('Passive recon on a domain, IP address, or URL')
+  .option('--no-registration', 'skip the RDAP / whois lookup')
+  .option('--no-tls', 'skip TLS certificate inspection')
+  .option('--no-http', 'skip the HTTP header grade + tech fingerprint')
+  .option('--no-robots', 'skip robots.txt / sitemap.xml')
+  .option('--no-subdomains', 'skip crt.sh subdomain enumeration')
+  .option('--no-ip-geo', 'skip IP geolocation')
+  .option('--index', 'also store the result in the search index', false)
+  .option('--json', 'output raw JSON', false)
+  .action(
+    async (
+      target: string,
+      opts: {
+        registration?: boolean;
+        tls?: boolean;
+        http?: boolean;
+        robots?: boolean;
+        subdomains?: boolean;
+        ipGeo?: boolean;
+        index?: boolean;
+        json?: boolean;
+      },
+    ) => {
+      const config = loadConfig();
+      // A local operator runs the CLI, so intranet targets are allowed.
+      const runner = createReconRunner({ ...config, recon: { ...config.recon, allowPrivateHosts: true } });
+      const report = await runner.run(target, {
+        includeRegistration: opts.registration !== false,
+        includeTls: opts.tls !== false,
+        includeHttp: opts.http !== false,
+        includeRobots: opts.robots !== false,
+        includeSubdomains: opts.subdomains !== false,
+        includeIpGeo: opts.ipGeo !== false,
+      });
+
+      if (opts.index) {
+        const { engine } = await openEngine();
+        engine.upsert(reconReportToDocument(report));
+        await engine.flush();
+      }
+
+      if (opts.json) {
+        process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+        return;
+      }
+
+      const icon: Record<ReconFindingStatus, string> = {
+        pass: '✔',
+        warn: '▲',
+        fail: '✘',
+        info: 'ℹ',
+      };
+      process.stdout.write(`\n  ${report.summary.headline}\n\n`);
+      for (const fact of report.summary.facts) process.stdout.write(`  · ${fact}\n`);
+      if (report.summary.facts.length) process.stdout.write('\n');
+      for (const item of report.findings) {
+        process.stdout.write(`  ${icon[item.status]} ${item.label}: ${item.detail}\n`);
+      }
+      if (report.subdomains?.subdomains.length) {
+        process.stdout.write(
+          `\n  subdomains (${report.subdomains.totalFound}): ` +
+            `${report.subdomains.subdomains.slice(0, 15).join(', ')}` +
+            `${report.subdomains.totalFound > 15 ? ' …' : ''}\n`,
+        );
+      }
+      if (report.errors.length) {
+        process.stdout.write(`\n  checks with errors: ${report.errors.map((e) => e.check).join(', ')}\n`);
+      }
+      process.stdout.write(`\n  sources: ${report.sources.join(', ')}\n`);
     },
   );
 
