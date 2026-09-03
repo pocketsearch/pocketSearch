@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
   type AnswerConfidence,
   type AnswerResponse,
   type HealthResponse,
   type IndexStats,
+  type OrchestratedResponse,
   type PlateCheck,
-  type SearchResponse,
   type TrustTier,
+  type UnifiedResult,
 } from './api';
 
 type Tab = 'search' | 'plate' | 'add' | 'crawl' | 'about';
@@ -163,16 +164,60 @@ export function App(): JSX.Element {
   );
 }
 
+/** Bare hostname / label for the small source line above a result title. */
+function resultDomain(hit: UnifiedResult): string {
+  if (hit.source) return hit.source;
+  if (hit.url) {
+    try {
+      return new URL(hit.url).hostname.replace(/^www\./, '');
+    } catch {
+      /* fall through */
+    }
+  }
+  return 'index';
+}
+
+/** Google-style breadcrumb: `example.com › docs › page`. */
+function prettyUrl(hit: UnifiedResult): string {
+  if (hit.displayUrl) return hit.displayUrl;
+  if (!hit.url) return '';
+  try {
+    const u = new URL(hit.url);
+    const parts = u.pathname.split('/').filter(Boolean);
+    return [u.hostname.replace(/^www\./, ''), ...parts].join(' › ');
+  } catch {
+    return hit.url;
+  }
+}
+
+/** `1.8 s` / `840 ms` / `0.4 ms`. */
+function formatTook(ms: number): string {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)} s`;
+  if (ms >= 10) return `${Math.round(ms)} ms`;
+  if (ms >= 1) return `${ms.toFixed(1)} ms`;
+  return `${ms.toFixed(2)} ms`;
+}
+
+const KIND_HEADING: Record<string, string> = {
+  related: 'Related discoveries',
+  suggestion: 'Try one of these',
+};
+
 function SearchView(): JSX.Element {
   const [input, setInput] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
-  const [page, setPage] = useState(0);
-  const [result, setResult] = useState<SearchResponse | null>(null);
+  const [deep, setDeep] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hits, setHits] = useState<UnifiedResult[]>([]);
+  const [meta, setMeta] = useState<OrchestratedResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const query = useDebounced(input, 200);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const query = useDebounced(input, 250);
   const answerQuery = useDebounced(input.trim(), 900);
   const abortRef = useRef<AbortController | null>(null);
+  const inFlightRef = useRef(false);
+  const deepPolledRef = useRef('');
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const answersEnabled = health?.answer.enabled ?? false;
@@ -221,43 +266,90 @@ function SearchView(): JSX.Element {
     if (isQuestionLike(answerQuery)) runAnswer(answerQuery, false);
   }, [answerQuery, answersEnabled, runAnswer]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [query, activeTags]);
+  // Run the dead-end-proof discovery search. `nextOffset === 0` starts fresh
+  // (replaces the list); anything else appends, so the page grows as you scroll.
+  const runSearch = useCallback(
+    (q: string, tags: string[], deepMode: boolean, nextOffset: number) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const fresh = nextOffset === 0;
+      inFlightRef.current = true;
+      if (fresh) setLoading(true);
+      else setLoadingMore(true);
+      api
+        .discover(
+          { q, limit: PAGE_SIZE, offset: nextOffset, tags, deep: deepMode },
+          controller.signal,
+        )
+        .then((res) => {
+          setError(null);
+          setMeta(res);
+          setOffset(nextOffset);
+          setHits((prev) => (fresh ? res.hits : [...prev, ...res.hits]));
+          // The backend is still widening this query in the background — poll
+          // once for the richer result set and swap it in without losing scroll.
+          if (fresh && res.searching && !deepMode && deepPolledRef.current !== q) {
+            deepPolledRef.current = q;
+            window.setTimeout(() => {
+              if (abortRef.current === controller && !controller.signal.aborted) {
+                runSearch(q, tags, true, 0);
+              }
+            }, 2600);
+          }
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
+          setError(err instanceof Error ? err.message : 'Search failed');
+        })
+        .finally(() => {
+          if (controller.signal.aborted) return;
+          inFlightRef.current = false;
+          setLoading(false);
+          setLoadingMore(false);
+        });
+    },
+    [],
+  );
 
+  // New query / filter / mode change → restart from the top.
   useEffect(() => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setLoading(true);
-    api
-      .search(
-        { q: query, limit: PAGE_SIZE, offset: page * PAGE_SIZE, tags: activeTags },
-        controller.signal,
-      )
-      .then((res) => {
-        setResult(res);
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(err instanceof Error ? err.message : 'Search failed');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [query, page, activeTags]);
+    deepPolledRef.current = '';
+    runSearch(query, activeTags, deep, 0);
+    return () => abortRef.current?.abort();
+  }, [query, activeTags, deep, runSearch]);
 
-  const totalPages = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
+  const effectiveDeep = meta?.deep ?? deep;
+  const hasMore = meta ? hits.length < meta.total : false;
+
+  const loadMore = useCallback(() => {
+    if (inFlightRef.current || !hasMore) return;
+    runSearch(query, activeTags, effectiveDeep, offset + PAGE_SIZE);
+  }, [hasMore, query, activeTags, effectiveDeep, offset, runSearch]);
+
+  // Infinite scroll: pull the next page as the sentinel nears the viewport.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { rootMargin: '800px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loadMore]);
+
   const facetTags = useMemo(
     () =>
-      result
-        ? Object.entries(result.facets.tags)
+      meta
+        ? Object.entries(meta.facets.tags)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 12)
         : [],
-    [result],
+    [meta],
   );
 
   const toggleTag = (tag: string) =>
@@ -286,20 +378,30 @@ function SearchView(): JSX.Element {
         )}
       </div>
 
-      {activeTags.length > 0 && (
-        <div className="chips">
-          {activeTags.map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              className="chip chip--active"
-              onClick={() => toggleTag(tag)}
-            >
-              {tag} ✕
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="search__controls">
+        <label className="search__deep">
+          <input
+            type="checkbox"
+            checked={deep}
+            onChange={(event) => setDeep(event.target.checked)}
+          />
+          Deep search
+        </label>
+        {activeTags.length > 0 && (
+          <div className="chips">
+            {activeTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className="chip chip--active"
+                onClick={() => toggleTag(tag)}
+              >
+                {tag} ✕
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {error && <p className="notice notice--error">{error}</p>}
 
@@ -321,17 +423,40 @@ function SearchView(): JSX.Element {
         />
       )}
 
-      {result && (
-        <p className="search__meta">
-          <strong>{result.total.toLocaleString()}</strong> result{result.total === 1 ? '' : 's'}
-          {result.query ? ` for “${result.query}”` : ''} · {result.tookMs} ms
-          {loading && (
-            <>
-              {' · '}
-              <span className="search__updating" aria-hidden /> updating
-            </>
+      {meta && query.trim() && (
+        <div className="search__status" role="status" aria-live="polite">
+          {meta.exactCount === 0 && meta.relatedCount === 0 && meta.suggestionCount > 0 && (
+            <p className="search__banner">
+              No exact matches for “{meta.query}” yet. Here’s where to look next.
+            </p>
           )}
-        </p>
+          {meta.exactCount === 0 && meta.relatedCount > 0 && (
+            <p className="search__banner">
+              No exact matches — showing related public material discovered across{' '}
+              {meta.sourcesCompleted} source{meta.sourcesCompleted === 1 ? '' : 's'}.
+            </p>
+          )}
+          <p className="search__meta">
+            About{' '}
+            <strong>
+              {(meta.exactCount + meta.relatedCount || meta.total).toLocaleString()}
+            </strong>{' '}
+            result{meta.exactCount + meta.relatedCount === 1 ? '' : 's'} · {meta.sourcesCompleted}{' '}
+            source{meta.sourcesCompleted === 1 ? '' : 's'} ·{' '}
+            {meta.cached ? 'cached' : formatTook(meta.tookMs)}
+            {meta.queryType !== 'text' && meta.queryType !== 'phrase' && (
+              <> · {meta.queryType.replace(/_/g, ' ')}</>
+            )}
+            {meta.deep && <> · deep</>}
+            {(loading || loadingMore || meta.searching) && (
+              <>
+                {' · '}
+                <span className="search__updating" aria-hidden />{' '}
+                {meta.searching && !meta.deep ? 'searching more sources…' : 'updating'}
+              </>
+            )}
+          </p>
+        </div>
       )}
 
       {facetTags.length > 0 && (
@@ -349,74 +474,140 @@ function SearchView(): JSX.Element {
         </div>
       )}
 
-      <ol className="results">
-        {result?.hits.map((hit) => (
-          <li key={hit.id} className="result">
-            <h3 className="result__title">
-              {hit.url ? (
-                <a href={hit.url} target="_blank" rel="noreferrer">
-                  <span dangerouslySetInnerHTML={{ __html: hit.title }} />
-                </a>
-              ) : (
-                <span dangerouslySetInnerHTML={{ __html: hit.title }} />
-              )}
-            </h3>
-            {hit.url && <div className="result__url">{hit.url}</div>}
-            <p className="result__snippet" dangerouslySetInnerHTML={{ __html: hit.snippet }} />
-            <div className="result__foot">
-              {hit.source && <span className="result__source">{hit.source}</span>}
-              {hit.tags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  className="chip chip--sm"
-                  onClick={() => toggleTag(tag)}
-                >
-                  {tag}
-                </button>
-              ))}
-              {hit.score > 0 && <span className="result__score">score {hit.score}</span>}
-            </div>
-          </li>
-        ))}
-      </ol>
+      {hits.length > 0 && (
+        <ol className="results" aria-busy={loading || loadingMore}>
+          {hits.map((hit, i) => {
+            const heading =
+              hit.kind !== hits[i - 1]?.kind && KIND_HEADING[hit.kind] ? (
+                <li key={`h-${hit.kind}`} className="results__heading" aria-hidden>
+                  {KIND_HEADING[hit.kind]}
+                </li>
+              ) : null;
 
-      {result && result.total === 0 && !loading && (
+            if (hit.kind === 'suggestion') {
+              return (
+                <Fragment key={hit.id}>
+                  {heading}
+                  <li className="result result--suggestion">
+                    <button
+                      type="button"
+                      className="result__suggest"
+                      onClick={() => {
+                        setInput(hit.action?.query ?? hit.title);
+                        setDeep(Boolean(hit.action?.deep));
+                      }}
+                    >
+                      <span className="result__suggest-title">
+                        {hit.action?.label ? `${hit.action.label}: ` : ''}
+                        <span dangerouslySetInnerHTML={{ __html: hit.title }} />
+                      </span>
+                      {hit.snippet && (
+                        <span
+                          className="result__suggest-why"
+                          dangerouslySetInnerHTML={{ __html: hit.snippet }}
+                        />
+                      )}
+                    </button>
+                  </li>
+                </Fragment>
+              );
+            }
+
+            return (
+              <Fragment key={hit.id}>
+                {heading}
+                <li className={hit.kind === 'related' ? 'result result--related' : 'result'}>
+                  <div className="result__source">
+                    {resultDomain(hit)}
+                    {hit.archived && (
+                      <span className="result__badge">
+                        archived{hit.archivedDate ? ` · ${hit.archivedDate.slice(0, 10)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="result__title">
+                    {hit.url ? (
+                      <a href={hit.url} target="_blank" rel="noreferrer">
+                        <span dangerouslySetInnerHTML={{ __html: hit.title }} />
+                      </a>
+                    ) : (
+                      <span dangerouslySetInnerHTML={{ __html: hit.title }} />
+                    )}
+                  </h3>
+                  {hit.url && <div className="result__url">{prettyUrl(hit)}</div>}
+                  {hit.snippet && (
+                    <p
+                      className="result__snippet"
+                      dangerouslySetInnerHTML={{ __html: hit.snippet }}
+                    />
+                  )}
+                  <div className="result__foot">
+                    {hit.foundVia.length > 0 && (
+                      <span className="result__via">found via {hit.foundVia.join(' · ')}</span>
+                    )}
+                    {hit.tags.slice(0, 4).map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="chip chip--sm"
+                        onClick={() => toggleTag(tag)}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </li>
+              </Fragment>
+            );
+          })}
+        </ol>
+      )}
+
+      {hasMore && (
+        <div className="results__more">
+          <div ref={sentinelRef} aria-hidden className="results__sentinel" />
+          <button type="button" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading…' : 'More results'}
+          </button>
+        </div>
+      )}
+
+      {meta && !hasMore && hits.length > PAGE_SIZE && (
+        <p className="results__end" aria-hidden>
+          — end of results —
+        </p>
+      )}
+
+      {!query.trim() && (
         <div className="empty">
           <Beacon size={150} />
-          <strong>{query ? 'no documents matched' : 'index ready'}</strong>
-          <span>
-            {query
-              ? 'Nothing in the index matched. Try a different query, or clear the active tag filters.'
-              : 'Type to search, or use Add / Crawl to fill the index.'}
-          </span>
-          {query && answersEnabled && !answerRequested && (
-            <button type="button" className="answer__cta" onClick={() => runAnswer(query, false)}>
-              ↳ weave an answer from live sources instead
-            </button>
-          )}
+          <strong>index ready</strong>
+          <span>Type to search, or use Add / Crawl to fill the index.</span>
           <span className="empty__dots" aria-hidden>
             . . . . . . .
           </span>
         </div>
       )}
 
-      {result && result.total > PAGE_SIZE && (
-        <div className="pager">
-          <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-            ← Previous
-          </button>
-          <span>
-            Page {page + 1} / {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page + 1 >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next →
-          </button>
-        </div>
+      {meta && meta.sources.length > 0 && (
+        <details className="diagnostics">
+          <summary>
+            search diagnostics — {meta.stagesRun.join(' → ') || 'local'} · stage{' '}
+            {meta.fallbackStage}
+            {meta.sourcesFailed > 0 ? ` · ${meta.sourcesFailed} source issue(s)` : ''}
+          </summary>
+          <ul>
+            {meta.sources.map((s, i) => (
+              <li key={`${s.name}-${i}`} className={`diagnostics__row diagnostics__row--${s.status}`}>
+                <span>{s.name}</span>
+                <span>{s.status}</span>
+                <span>{s.count} hits</span>
+                <span>{s.ms} ms</span>
+                {s.error && <span className="diagnostics__err">{s.error}</span>}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );

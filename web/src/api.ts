@@ -3,6 +3,7 @@
 // erased at build time — the web bundle never pulls in backend code.
 import type { BeaconDocument, IndexStats, SearchHit, SearchResponse } from '@core/types';
 import type { PlateCheck } from '@core/plate/types';
+import type { OrchestratedResponse, UnifiedResult } from '@core/discovery/types';
 import type {
   AnswerClaim,
   AnswerConfidence,
@@ -18,10 +19,12 @@ export type {
   AnswerSource,
   BeaconDocument,
   IndexStats,
+  OrchestratedResponse,
   PlateCheck,
   SearchHit,
   SearchResponse,
   TrustTier,
+  UnifiedResult,
 };
 
 export interface HealthResponse {
@@ -58,15 +61,33 @@ export interface SearchParams {
   source?: string;
 }
 
+export interface DiscoverParams extends SearchParams {
+  deep?: boolean;
+}
+
+function searchQs(params: SearchParams): URLSearchParams {
+  const qs = new URLSearchParams();
+  qs.set('q', params.q);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  if (params.source) qs.set('source', params.source);
+  for (const tag of params.tags ?? []) qs.append('tags', tag);
+  return qs;
+}
+
 export const api = {
   search(params: SearchParams, signal?: AbortSignal): Promise<SearchResponse> {
-    const qs = new URLSearchParams();
-    qs.set('q', params.q);
-    if (params.limit) qs.set('limit', String(params.limit));
-    if (params.offset) qs.set('offset', String(params.offset));
-    if (params.source) qs.set('source', params.source);
-    for (const tag of params.tags ?? []) qs.append('tags', tag);
-    return request<SearchResponse>(`/api/search?${qs.toString()}`, { signal });
+    return request<SearchResponse>(`/api/search?${searchQs(params).toString()}`, { signal });
+  },
+  /**
+   * The dead-end-proof search: routes through the multi-source discovery
+   * cascade so a valid query always yields at least one renderable result.
+   */
+  discover(params: DiscoverParams, signal?: AbortSignal): Promise<OrchestratedResponse> {
+    const qs = searchQs(params);
+    qs.set('fallback', '1');
+    if (params.deep) qs.set('deep', '1');
+    return request<OrchestratedResponse>(`/api/search?${qs.toString()}`, { signal });
   },
   stats(): Promise<IndexStats> {
     return request<IndexStats>('/api/stats');

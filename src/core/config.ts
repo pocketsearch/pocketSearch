@@ -19,6 +19,19 @@ export interface Config {
   maxBodyBytes: number;
   plate: PlateConfig;
   answer: AnswerConfig;
+  discovery: DiscoveryConfig;
+}
+
+export interface DiscoveryConfig {
+  /** Master switch for the multi-source discovery cascade (`?fallback=1`). */
+  enabled: boolean;
+  /** Overall deadline for a normal search (ms). */
+  normalBudgetMs: number;
+  /** Overall deadline for a deep search (ms). */
+  deepBudgetMs: number;
+  /** Fetch + index the top few newly-discovered public pages so the local
+   *  index improves over time. Uses the same robots / SSRF-guard stack. */
+  crawlAndIndex: boolean;
 }
 
 export interface AnswerConfig {
@@ -94,9 +107,10 @@ function readOptional(name: string): string | undefined {
   return raw === undefined || raw.trim() === '' ? undefined : raw.trim();
 }
 
-export interface ConfigOverrides extends Partial<Omit<Config, 'plate' | 'answer'>> {
+export interface ConfigOverrides extends Partial<Omit<Config, 'plate' | 'answer' | 'discovery'>> {
   plate?: Partial<PlateConfig>;
   answer?: Partial<AnswerConfig>;
+  discovery?: Partial<DiscoveryConfig>;
 }
 
 const WEB_SEARCH_PROVIDERS = ['brave', 'tavily', 'searxng'] as const;
@@ -179,14 +193,21 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
       trustedDomains: readList('ANSWER_TRUSTED_DOMAINS'),
       allowPrivateHosts: readBool('BEACON_ANSWER_ALLOW_PRIVATE', false),
     },
+    discovery: {
+      enabled: readBool('BEACON_DISCOVERY_ENABLED', true),
+      normalBudgetMs: readInt('BEACON_DISCOVERY_BUDGET_MS', 5_000),
+      deepBudgetMs: readInt('BEACON_DISCOVERY_DEEP_BUDGET_MS', 15_000),
+      crawlAndIndex: readBool('BEACON_DISCOVERY_CRAWL', true),
+    },
   };
 
-  // `plate` / `answer` are merged rather than replaced so callers can override a
-  // single nested field without restating the whole sub-config.
+  // `plate` / `answer` / `discovery` are merged rather than replaced so callers
+  // can override a single nested field without restating the whole sub-config.
   return {
     ...base,
     ...overrides,
     plate: { ...base.plate, ...overrides.plate },
     answer: { ...base.answer, ...overrides.answer },
+    discovery: { ...base.discovery, ...overrides.discovery },
   };
 }

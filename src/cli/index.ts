@@ -172,6 +172,8 @@ program
       tags: [],
       fuzzy: true,
       prefix: true,
+      fallback: false,
+      deep: false,
     });
     if (opts.json) {
       process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);

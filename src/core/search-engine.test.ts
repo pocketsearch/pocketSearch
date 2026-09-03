@@ -3,7 +3,17 @@ import { SearchEngine } from './search-engine.js';
 import type { SearchQuery } from './types.js';
 
 function q(overrides: Partial<SearchQuery> = {}): SearchQuery {
-  return { q: '', limit: 10, offset: 0, tags: [], fuzzy: true, prefix: true, ...overrides };
+  return {
+    q: '',
+    limit: 10,
+    offset: 0,
+    tags: [],
+    fuzzy: true,
+    prefix: true,
+    fallback: false,
+    deep: false,
+    ...overrides,
+  };
 }
 
 function seed(engine: SearchEngine): void {

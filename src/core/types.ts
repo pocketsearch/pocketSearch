@@ -66,6 +66,10 @@ export const searchQuerySchema = z.object({
   source: z.string().trim().min(1).max(256).optional(),
   fuzzy: booleanParam(true),
   prefix: booleanParam(true),
+  /** Route through the multi-source discovery cascade (never a dead end). */
+  fallback: booleanParam(false),
+  /** Widen the discovery cascade substantially (implies `fallback`). */
+  deep: booleanParam(false),
 });
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 

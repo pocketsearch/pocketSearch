@@ -8,6 +8,24 @@ import { createLogger } from '../core/logger.js';
 import { PersistentEngine } from '../core/store.js';
 import { buildApp } from './app.js';
 
+/** A fetch stub that keeps the discovery providers offline and deterministic. */
+function offlineDiscoveryFetch(mode: 'empty' | 'throw' = 'empty'): typeof fetch {
+  return (async (input: RequestInfo | URL) => {
+    if (mode === 'throw') throw new Error('network down');
+    const url = String(input);
+    const json = (value: unknown) =>
+      new Response(JSON.stringify(value), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    if (url.includes('collinfo.json')) {
+      return json([{ id: 'CC', 'cdx-api': 'https://index.commoncrawl.org/CC-MAIN-index' }]);
+    }
+    if (url.includes('crt.sh') || url.includes('web.archive.org/cdx')) return json([]);
+    return json({});
+  }) as unknown as typeof fetch;
+}
+
 describe('HTTP API', () => {
   let app: FastifyInstance;
   let dir: string;
@@ -225,5 +243,113 @@ describe('HTTP API', () => {
     });
     expect(res.json().valid).toBe(false);
     expect(res.json().summary.status).toBe('invalid');
+  });
+
+  it('plain /api/search is unchanged — a non-matching query still returns total 0', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/search?q=nothingmatchesthisxyz' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().total).toBe(0);
+    expect(res.json()).not.toHaveProperty('fallbackStage');
+  });
+
+  it('reports discovery providers on /api/health', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/health' });
+    expect(res.json().discovery.enabled).toBe(true);
+    expect(Array.isArray(res.json().discovery.providers)).toBe(true);
+  });
+});
+
+describe('HTTP API — the search invariant (?fallback=1)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'beacon-fb-'));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function makeApp(mode: 'empty' | 'throw') {
+    const config = loadConfig({
+      indexFile: path.join(dir, `${mode}.json`),
+      webDir: path.join(dir, 'no-web'),
+      logLevel: 'silent',
+      persistDebounceMs: 0,
+      discovery: { crawlAndIndex: false, normalBudgetMs: 1500, deepBudgetMs: 3000 },
+    });
+    const engine = new PersistentEngine({ indexFile: config.indexFile, debounceMs: 0 });
+    await engine.load();
+    const app = await buildApp({ config, engine, fetchImpl: offlineDiscoveryFetch(mode) });
+    await app.ready();
+    return { app, engine };
+  }
+
+  it('never returns an empty result set for a valid query, even with an empty index', async () => {
+    const { app } = await makeApp('empty');
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/search?q=' + encodeURIComponent('a totally unindexed phrase 12345') + '&fallback=1',
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.hits.length).toBeGreaterThanOrEqual(1);
+      expect(body.exactCount).toBe(0);
+      expect(body.hits.every((h: { kind: string }) => h.kind === 'suggestion')).toBe(true);
+      expect(body.hits[0].action.query).toBeTruthy();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns local matches as exact results and still succeeds', async () => {
+    const { app } = await makeApp('empty');
+    try {
+      await app.inject({
+        method: 'POST',
+        url: '/api/documents',
+        payload: { title: 'Widgets handbook', body: 'all about widgets and gadgets', tags: ['docs'] },
+      });
+      const res = await app.inject({ method: 'GET', url: '/api/search?q=widgets&fallback=1' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.exactCount).toBeGreaterThanOrEqual(1);
+      expect(body.hits[0].snippet).toContain('<mark>');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('a total upstream outage does not 500 — it degrades to suggestions', async () => {
+    const { app } = await makeApp('throw');
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/search?q=' + encodeURIComponent('resilient under total outage') + '&fallback=1&deep=1',
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.hits.length).toBeGreaterThanOrEqual(1);
+      expect(body.sourcesFailed).toBeGreaterThanOrEqual(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('paginates via offset like the plain endpoint', async () => {
+    const { app, engine } = await makeApp('empty');
+    try {
+      for (let i = 0; i < 25; i += 1) {
+        engine.upsert({ title: `Widget note ${i}`, body: 'widget widget widget', tags: [], url: `https://w.test/${i}` });
+      }
+      const p1 = await app.inject({ method: 'GET', url: '/api/search?q=widget&fallback=1&limit=10&offset=0' });
+      const p2 = await app.inject({ method: 'GET', url: '/api/search?q=widget&fallback=1&limit=10&offset=10' });
+      expect(p1.json().hits.length).toBe(10);
+      expect(p2.json().hits.length).toBeGreaterThan(0);
+      expect(p1.json().total).toBe(p2.json().total);
+      expect(p1.json().hits[0].id).not.toBe(p2.json().hits[0].id);
+    } finally {
+      await app.close();
+    }
   });
 });

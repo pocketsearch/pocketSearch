@@ -5,6 +5,7 @@ No database, no external services — the index lives in memory and is persisted
 single JSON file. Runs anywhere Node.js 20+ runs, or as a Docker container.
 
 - **Full-text search** with prefix + fuzzy matching, title/tag boosting, tag facets and highlighted snippets (powered by [MiniSearch](https://github.com/lucaong/minisearch)).
+- **Discovery cascade** — a query the local index can't answer fans out to public, no-key sources (Wikipedia, Wayback Machine, Common Crawl, Hacker News, certificate transparency) plus any configured web search, with query expansion, entity pivots, circuit breakers and result caching. A valid query **never dead-ends on "no results"** — worst case it returns related material or real search shortcuts. See [docs/discovery.md](docs/discovery.md).
 - **Answer weave** — question-like queries also get a short written answer built _only_ from retrieved sources (index pages + optional live web search), with per-sentence citations, domain trust tiers, retrieval timestamps and a confidence banner. Works offline as a deterministic weave; upgrades to prose with an LLM key.
 - **UK number plate checker** with automatic backend checks — format, age identifier, DVLA region, and (with free API keys) DVLA tax/MOT status and DVSA MOT history.
 - **MCP server** (`beacon-mcp`, built on [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)) exposing the plate checker and the index as tools for Claude & other MCP clients.
@@ -86,7 +87,7 @@ available as `beacon`.
 | -------- | --------------------- | ---------------------------------------------------- |
 | `GET`    | `/api/health`         | Liveness + document count                            |
 | `GET`    | `/api/stats`          | Index statistics, top tags/sources                   |
-| `GET`    | `/api/search`         | `?q=&limit=&offset=&tags=&source=&fuzzy=&prefix=`    |
+| `GET`    | `/api/search`         | `?q=&limit=&offset=&tags=&source=&fuzzy=&prefix=` — add `&fallback=1` for the discovery cascade (never a dead end), `&deep=1` to fan out wider |
 | `GET`    | `/api/answer`         | Woven, cited answer for a query (`?q=&fresh=`)       |
 | `GET`    | `/api/documents`      | List documents (`?limit=&offset=`)                   |
 | `GET`    | `/api/documents/:id`  | Fetch one document                                   |

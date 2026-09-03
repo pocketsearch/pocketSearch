@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AnswerBusyError, type AnswerService } from '../core/answer/index.js';
 import type { Config } from '../core/config.js';
 import { crawl } from '../core/crawler.js';
+import type { Orchestrator } from '../core/discovery/index.js';
 import type { PlateChecker } from '../core/plate/checker.js';
 import { plateCheckToDocument } from '../core/plate/index.js';
 import type { PersistentEngine } from '../core/store.js';
@@ -32,11 +33,12 @@ export interface RouteContext {
   engine: PersistentEngine;
   plateChecker: PlateChecker;
   answerService: AnswerService | null;
+  orchestrator: Orchestrator | null;
 }
 
 /** Canonical `/health` body, used by both `/health` and `/api/health`. */
 export function healthPayload(
-  ctx: Pick<RouteContext, 'engine' | 'plateChecker' | 'answerService'>,
+  ctx: Pick<RouteContext, 'engine' | 'plateChecker' | 'answerService' | 'orchestrator'>,
 ) {
   return {
     status: 'ok' as const,
@@ -46,6 +48,9 @@ export function healthPayload(
     answer: ctx.answerService
       ? ctx.answerService.capabilities
       : { enabled: false as const, webSearch: null, llm: [] as string[] },
+    discovery: ctx.orchestrator
+      ? { enabled: true as const, providers: ctx.orchestrator.providerHealth }
+      : { enabled: false as const, providers: [] as never[] },
   };
 }
 
@@ -101,6 +106,14 @@ export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
 
     app.get('/search', async (request) => {
       const query = searchQuerySchema.parse(request.query);
+      if ((query.fallback || query.deep) && ctx.orchestrator) {
+        return ctx.orchestrator.search(query.q, {
+          limit: query.limit,
+          offset: query.offset,
+          deep: query.deep,
+          tags: query.tags,
+        });
+      }
       return engine.search(query);
     });
 

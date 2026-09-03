@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import { createAnswerService } from '../core/answer/index.js';
 import type { Config } from '../core/config.js';
+import { createOrchestrator } from '../core/discovery/index.js';
 import { createLogger, type Logger } from '../core/logger.js';
 import { createPlateChecker } from '../core/plate/index.js';
 import { PersistentEngine } from '../core/store.js';
@@ -14,6 +15,8 @@ export interface BuildAppOptions {
   config: Config;
   engine?: PersistentEngine;
   logger?: Logger;
+  /** Injectable fetch for the answer + discovery layers (tests). */
+  fetchImpl?: typeof fetch;
 }
 
 const PLACEHOLDER_PAGE = `<!doctype html>
@@ -59,7 +62,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     config,
     engine,
     plateChecker: createPlateChecker(config),
-    answerService: createAnswerService(config, { engine, logger }),
+    answerService: createAnswerService(config, { engine, logger, fetchImpl: options.fetchImpl }),
+    orchestrator: config.discovery.enabled
+      ? createOrchestrator(config, { engine, logger, fetchImpl: options.fetchImpl })
+      : null,
   };
   await app.register(apiRoutes(ctx), { prefix: '/api' });
 

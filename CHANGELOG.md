@@ -8,6 +8,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Discovery cascade** (`src/core/discovery/`): a search-orchestration layer
+  that guarantees every non-empty query yields at least one renderable result.
+  `GET /api/search?fallback=1` (used by the web UI) runs local index → web
+  providers → query expansion → archives → entity pivots → related material →
+  query suggestions, stopping as soon as the result set is no longer
+  "insufficient" (`?deep=1` runs every stage). No-key providers: Wikipedia,
+  Wayback Machine CDX, Common Crawl URL index, Hacker News, certificate
+  transparency; the configured web-search provider (Brave/Tavily/SearXNG) is
+  reused when set. Each provider has a per-call timeout, error isolation and a
+  circuit breaker (`healthy`/`degraded`/`temporarily_disabled`/`rate_limited`/
+  `misconfigured`); results are URL-canonicalised, deduped with `foundVia`
+  provenance, and ranked with a rarity/diversity model that surfaces
+  archive-only material. Results are cached (stale-served on total outage) and a
+  thin normal search pre-computes the deep pass in the background. Discovered
+  public pages are fetched (robots + SSRF-guarded) and added to the local index.
+  Structured per-query logs; provider health on `GET /api/health`. See
+  `docs/discovery.md`. Plain `GET /api/search` (no `fallback`) is unchanged.
+- Web UI: a **Deep search** toggle, a "No exact matches — showing related
+  discoveries" state that replaces the old empty "no documents matched" screen,
+  progressive result counts (`… · searching more sources…`), `found via` source
+  provenance, archived-capture badges, and a collapsible search-diagnostics
+  panel. The zero-result dead end is no longer reachable for a valid query.
+
 - **Answer weave** (`src/core/answer/`): `GET /api/answer?q=` and the Search tab
   return a short written answer for question-like queries, assembled only from
   retrieved sources. Retrieval combines the local index with optional live web
