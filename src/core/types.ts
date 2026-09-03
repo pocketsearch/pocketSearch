@@ -80,6 +80,19 @@ export const answerQuerySchema = z.object({
 });
 export type AnswerQuery = z.infer<typeof answerQuerySchema>;
 
+export const reconQuerySchema = z.object({
+  target: z.string().trim().min(1).max(2048),
+  registration: booleanParam(true),
+  tls: booleanParam(true),
+  http: booleanParam(true),
+  robots: booleanParam(true),
+  subdomains: booleanParam(true),
+  ipGeo: booleanParam(true),
+  /** Store the completed report in the search index. */
+  index: optionalBooleanParam,
+});
+export type ReconQuery = z.infer<typeof reconQuerySchema>;
+
 export const crawlInputSchema = z.object({
   url: z.string().trim().url(),
   maxPages: z.coerce.number().int().min(1).max(2000).optional(),

@@ -5,13 +5,13 @@
   "type": "module",
   "license": "MIT",
   "author": "abeaconsearch contributors",
-  "homepage": "https://github.com/abbieymatthews030-star/abeaconsearch#readme",
+  "homepage": "https://github.com/pocketsearch/pocketSearch#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/abbieymatthews030-star/abeaconsearch.git"
+    "url": "https://github.com/pocketsearch/pocketSearch.git"
   },
   "bugs": {
-    "url": "https://github.com/abbieymatthews030-star/abeaconsearch/issues"
+    "url": "https://github.com/pocketsearch/pocketSearch/issues"
   },
   "keywords": [
     "search",

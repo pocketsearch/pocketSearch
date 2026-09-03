@@ -8,6 +8,7 @@ import type { Config } from '../core/config.js';
 import { createOrchestrator } from '../core/discovery/index.js';
 import { createLogger, type Logger } from '../core/logger.js';
 import { createPlateChecker } from '../core/plate/index.js';
+import { createReconRunner } from '../core/recon/index.js';
 import { PersistentEngine } from '../core/store.js';
 import { apiRoutes, healthPayload, registerErrorHandler, type RouteContext } from './routes.js';
 
@@ -62,6 +63,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     config,
     engine,
     plateChecker: createPlateChecker(config),
+    reconRunner: config.recon.enabled
+      ? createReconRunner(config, { logger, fetchImpl: options.fetchImpl })
+      : null,
     answerService: createAnswerService(config, { engine, logger, fetchImpl: options.fetchImpl }),
     orchestrator: config.discovery.enabled
       ? createOrchestrator(config, { engine, logger, fetchImpl: options.fetchImpl })

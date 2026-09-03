@@ -17,6 +17,8 @@ concurrent-writer races).
 | `decode_plate`          | Age period + DVLA region/office, offline                             | —                                                                       |
 | `dvla_vehicle_enquiry`  | Make/colour/year/tax/MOT status                                      | `DVLA_VES_API_KEY`                                                      |
 | `mot_history`           | Full MOT test history, mileage, defects                              | `MOT_CLIENT_ID` / `MOT_CLIENT_SECRET` / `MOT_API_KEY` / `MOT_TOKEN_URL` |
+| `recon_target`          | Passive recon on a domain / IP / URL (see [recon.md](recon.md))      | —                                                                      |
+| `geolocate_ip`          | Country/region/city/ASN/ISP for a public IP                          | —                                                                      |
 | `beacon_search`         | Full-text search the index                                           | a running `beacon serve`                                                |
 | `beacon_index_document` | Add/replace a document                                               | a running `beacon serve`                                                |
 | `beacon_stats`          | Index statistics                                                     | a running `beacon serve`                                                |

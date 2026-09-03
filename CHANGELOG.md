@@ -8,6 +8,50 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Inline calculator** (`src/core/answer/calculator.ts`): `GET /api/answer` now
+  answers a self-contained calculation directly, before any retrieval —
+  arithmetic (`2^10`, `sqrt(144)`, `3 + 4 * 2`, `pi`/`e`), percentages
+  (`15% of 200`, `30 as a percentage of 120`, `200 increased by 10%`) and unit
+  conversions (`10 km to miles`, `100 c to f`, `5 kg in lb`, `1 gb to mb`).
+  Arithmetic runs through a small recursive-descent parser, never `eval`.
+  Response gains `synthesizer: "calculator"` and a `calculation` object.
+- **Cross-source analysis** (`src/core/answer/analysis.ts`, ported from
+  `backpocketsearch`): answers with ≥ 2 sources carry an `analysis` object —
+  consensus (mean pairwise extract overlap), up to 3 contradictions (negation or
+  figure clash between sources), and per-source bias tags. Additive; never
+  changes the answer or its confidence.
+- **Comparison-query expansion** (`src/core/discovery/comparison.ts`): "X vs Y" /
+  "difference between X and Y" / "compare X and Y" queries also fan out to each
+  side on its own, so the cascade has material on both.
+
+- **12 more keyless discovery providers** (`src/core/discovery/providers/`):
+  Wikidata (`wbsearchentities`), DuckDuckGo Instant Answer, Stack Overflow
+  (Stack Exchange API), GitHub repositories, npm registry search, PyPI
+  exact-project lookup, OpenAlex (scholarly works, with abstract reconstruction),
+  OpenStreetMap / Nominatim (place-like queries only), and four vulnerability
+  databases — OSV.dev, GitHub Security Advisories, NVD and CISA KEV — that run
+  for a CVE / GHSA id or an explicitly security-flavoured query. All no-key,
+  each with its own circuit breaker; `GET /api/health` lists them.
+- **Source-trust ranking signal** (`src/core/discovery/trust.ts`, ported from
+  `backpocketsearch`): a per-source weight (standards bodies and official vuln
+  databases high, open forums lower) added as a small nudge in `rank.ts`, plus a
+  bound on the provider-confidence term so a raw upstream relevance score can no
+  longer bury authoritative results.
+
+- **Passive recon** (`src/core/recon/`): profile a domain, IP address, or URL
+  from public data only. `GET /api/recon?target=`, `beacon recon <target>`, a
+  *Recon* tab in the web UI, and the MCP tools `recon_target` / `geolocate_ip`.
+  Checks: DNS over HTTPS (A/AAAA/MX/NS/TXT/CNAME/SOA + SPF + DMARC), RDAP
+  registration data with a system-`whois` fallback, the TLS certificate served on
+  :443, HTTP security-header grade (A–F) and a technology fingerprint, `robots.txt`
+  / `sitemap.xml`, `crt.sh` certificate-transparency subdomains, and IP
+  geolocation (`ipwho.is`, `ipapi.co` fallback). Every check runs in parallel with
+  its own timeout and error isolation; a failure lands in `errors[]` and the rest
+  of the report is still returned. Targets resolving to private / loopback
+  addresses are refused unless `BEACON_RECON_ALLOW_PRIVATE=1` (the CLI always
+  allows them). No API keys. `GET /api/health` reports recon capabilities. See
+  `docs/recon.md`.
+
 - **Discovery cascade** (`src/core/discovery/`): a search-orchestration layer
   that guarantees every non-empty query yields at least one renderable result.
   `GET /api/search?fallback=1` (used by the web UI) runs local index → web

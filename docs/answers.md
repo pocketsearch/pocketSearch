@@ -14,6 +14,15 @@ it is explicit about where every statement comes from and how far to trust it.
 
 ## Pipeline
 
+0. **Calculator** (`src/core/answer/calculator.ts`) — before any retrieval, the
+   query is checked for a self-contained calculation: arithmetic (`2^10`,
+   `sqrt(144)`, `3 + 4 * 2`, constants `pi`/`e`), a percentage (`15% of 200`,
+   `30 as a percentage of 120`, `200 increased by 10%`), or a unit conversion
+   (`10 km to miles`, `100 c to f`, `5 kg in lb`, `2 hours in minutes`,
+   `1 gb to mb`). Arithmetic is evaluated by a small recursive-descent parser —
+   never `eval`. On a hit the answer is returned immediately with
+   `synthesizer: "calculator"`, `confidence: "high"`, a `calculation` object,
+   and no sources.
 1. **Retrieve** (`src/core/answer/retrieval.ts`)
    - Local index: an OR-combined search, top _n_ documents.
    - Live web: if `BEACON_ANSWER_WEB_SEARCH` is `brave` / `tavily` / `searxng`
@@ -63,3 +72,19 @@ the answer is either an honest "the sources don't answer this" line or, if an
 LLM ran, a single paragraph explicitly prefixed **"Unverified — general
 knowledge, not backed by a retrieved source"**. The endpoint always returns a
 non-empty answer.
+
+## Cross-source analysis
+
+When an answer has ≥ 2 sources, the response also carries an `analysis` object
+(`src/core/answer/analysis.ts`, heuristic and deterministic):
+
+- **consensus** — mean pairwise token-overlap of the source extracts, as an
+  agreement percentage, plus the number of distinct domains.
+- **contradictions** — up to 3 pairs of sources that cover the same ground but
+  disagree: one negates/qualifies the other, or they cite materially different
+  figures for the same thing. Each names the two source ids.
+- **bias** — per-source slant tags (`commercial`, `opinion`, `scientific`,
+  `political`, or `neutral`), from language cues plus the source domain.
+
+This is a reading aid, not a verdict — it never changes the answer or its
+confidence.

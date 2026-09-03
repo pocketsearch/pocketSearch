@@ -20,6 +20,22 @@ export interface Config {
   plate: PlateConfig;
   answer: AnswerConfig;
   discovery: DiscoveryConfig;
+  recon: ReconConfig;
+}
+
+export interface ReconConfig {
+  /** Master switch for the recon toolset and `GET /api/recon`. */
+  enabled: boolean;
+  /** Per-check base timeout in ms (slower sources get a buffer on top). */
+  timeoutMs: number;
+  /** Allow targets that resolve to private / loopback addresses. */
+  allowPrivateHosts: boolean;
+  /** Permit the system `whois` binary as an RDAP fallback. */
+  whois: boolean;
+  /** How many resolved addresses to geolocate for a domain target. */
+  maxGeoIps: number;
+  /** Index each completed recon report as a document. */
+  indexResults: boolean;
 }
 
 export interface DiscoveryConfig {
@@ -107,10 +123,12 @@ function readOptional(name: string): string | undefined {
   return raw === undefined || raw.trim() === '' ? undefined : raw.trim();
 }
 
-export interface ConfigOverrides extends Partial<Omit<Config, 'plate' | 'answer' | 'discovery'>> {
+export interface ConfigOverrides
+  extends Partial<Omit<Config, 'plate' | 'answer' | 'discovery' | 'recon'>> {
   plate?: Partial<PlateConfig>;
   answer?: Partial<AnswerConfig>;
   discovery?: Partial<DiscoveryConfig>;
+  recon?: Partial<ReconConfig>;
 }
 
 const WEB_SEARCH_PROVIDERS = ['brave', 'tavily', 'searxng'] as const;
@@ -152,7 +170,7 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
     persistDebounceMs: readInt('BEACON_PERSIST_DEBOUNCE_MS', 750),
     crawlUserAgent: readString(
       'BEACON_CRAWL_USER_AGENT',
-      'BeaconSearchBot/1.0 (+https://github.com/abbieymatthews030-star/abeaconsearch)',
+      'BeaconSearchBot/1.0 (+https://github.com/pocketsearch/pocketSearch)',
     ),
     crawlMaxPages: readInt('BEACON_CRAWL_MAX_PAGES', 50),
     crawlConcurrency: readInt('BEACON_CRAWL_CONCURRENCY', 4),
@@ -199,6 +217,14 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
       deepBudgetMs: readInt('BEACON_DISCOVERY_DEEP_BUDGET_MS', 15_000),
       crawlAndIndex: readBool('BEACON_DISCOVERY_CRAWL', true),
     },
+    recon: {
+      enabled: readBool('BEACON_RECON_ENABLED', true),
+      timeoutMs: readInt('BEACON_RECON_TIMEOUT_MS', 8_000),
+      allowPrivateHosts: readBool('BEACON_RECON_ALLOW_PRIVATE', false),
+      whois: readBool('BEACON_RECON_WHOIS', true),
+      maxGeoIps: readInt('BEACON_RECON_MAX_GEO_IPS', 3),
+      indexResults: readBool('BEACON_RECON_INDEX_RESULTS', false),
+    },
   };
 
   // `plate` / `answer` / `discovery` are merged rather than replaced so callers
@@ -209,5 +235,6 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
     plate: { ...base.plate, ...overrides.plate },
     answer: { ...base.answer, ...overrides.answer },
     discovery: { ...base.discovery, ...overrides.discovery },
+    recon: { ...base.recon, ...overrides.recon },
   };
 }
