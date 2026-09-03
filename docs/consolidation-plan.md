@@ -59,14 +59,18 @@ grounded Q&A; a chat tab would be UI work the user excluded).
   the web UI (functional parity only — no design-system import).
 - Bare-domain / bare-IP search queries attach a recon summary result.
 
-### Phase 1 — providers + trust (self-contained, no schema changes)
-- Add providers: **Wikidata, DuckDuckGo Instant Answer, StackExchange, OpenAlex,
-  GitHub repos, GitHub code, npm, PyPI, OSV.dev, GitHub GHSA, CISA KEV, NVD,
-  Nominatim/OSM.** Each: `configured=true`, no key, circuit-breaker via existing `base.ts`.
-- Add a `sourceTrust(host|provider): number` table; feed it as a ranking signal in
-  `discovery/rank.ts` and as a tier hint in `answer/trust.ts`.
-- Tests per provider (fixture-based, like `wikipedia`/`wayback` tests).
-- Register in `providers/index.ts`; surface health on `/api/health` (automatic).
+### Phase 1 — providers + trust (self-contained, no schema changes)  ✅ done
+- Added providers: **Wikidata, DuckDuckGo Instant Answer, Stack Overflow,
+  OpenAlex, GitHub repos, npm, PyPI, OSV.dev, GitHub Advisories, CISA KEV, NVD,
+  Nominatim/OSM.** (GitHub *code* search dropped — needs a token.) Each
+  `configured=true`, no key, own circuit breaker.
+- `discovery/trust.ts` — `sourceTrust()` from a `PROVIDER_TRUST` table; fed into
+  `rank.ts` as a small ±0.35 nudge, plus a bound on the raw provider-confidence
+  term so an auto-indexed page can't bury authoritative sources.
+- Registered in `providers/index.ts`; health on `/api/health` automatic.
+- Orchestrator `runStage` task cap made per-stage so stage 1 fans out to the
+  full provider roster.
+- Tests: `trust.test.ts`, `providers/new-providers.test.ts`, 2 new `rank.test.ts`.
 
 ### Phase 2 — answer intelligence (no schema changes)
 - Calculator pre-step (feature 3): deterministic, before retrieval; returns an answer card.

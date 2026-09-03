@@ -8,6 +8,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **12 more keyless discovery providers** (`src/core/discovery/providers/`):
+  Wikidata (`wbsearchentities`), DuckDuckGo Instant Answer, Stack Overflow
+  (Stack Exchange API), GitHub repositories, npm registry search, PyPI
+  exact-project lookup, OpenAlex (scholarly works, with abstract reconstruction),
+  OpenStreetMap / Nominatim (place-like queries only), and four vulnerability
+  databases — OSV.dev, GitHub Security Advisories, NVD and CISA KEV — that run
+  for a CVE / GHSA id or an explicitly security-flavoured query. All no-key,
+  each with its own circuit breaker; `GET /api/health` lists them.
+- **Source-trust ranking signal** (`src/core/discovery/trust.ts`, ported from
+  `backpocketsearch`): a per-source weight (standards bodies and official vuln
+  databases high, open forums lower) added as a small nudge in `rank.ts`, plus a
+  bound on the provider-confidence term so a raw upstream relevance score can no
+  longer bury authoritative results.
+
 - **Passive recon** (`src/core/recon/`): profile a domain, IP address, or URL
   from public data only. `GET /api/recon?target=`, `beacon recon <target>`, a
   *Recon* tab in the web UI, and the MCP tools `recon_target` / `geolocate_ip`.

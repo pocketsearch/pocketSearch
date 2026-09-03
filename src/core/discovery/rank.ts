@@ -1,5 +1,6 @@
 import { normalizeWhitespace, tokenize } from '../text.js';
 import { canonicalUrl, lexicalRelevance } from './result.js';
+import { sourceTrust } from './trust.js';
 import type { QueryClassification, ResultOrigin, UnifiedResult } from './types.js';
 
 const RARE_ORIGINS: ReadonlySet<ResultOrigin> = new Set(['archive', 'academic', 'code']);
@@ -72,7 +73,10 @@ export function rank(results: UnifiedResult[], opts: RankOptions): UnifiedResult
     let score = 0;
     score += relevance * 3;
     score += titleRel * 2;
-    score += r.score; // provider's own confidence
+    // Provider's own confidence — bounded so a raw upstream relevance score
+    // (e.g. MiniSearch's unnormalised BM25-ish value on an auto-indexed page)
+    // can't dwarf every other signal and bury authoritative sources.
+    score += Math.min(r.score, 2.5);
     // Local confidence — but scaled by how well the doc actually matches, so a
     // loose OR-pass hit on a common word doesn't outrank real web results.
     if (r.origin === 'index') score += 0.35 + 1.1 * Math.max(relevance, titleRel);
@@ -84,6 +88,12 @@ export function rank(results: UnifiedResult[], opts: RankOptions): UnifiedResult
       score += 0.8;
     }
     if (r.foundVia.length > 1) score += 0.25 * (r.foundVia.length - 1); // corroborated
+
+    // Source-trust nudge — a small ±0.35 band around a neutral 0.5 so an
+    // authoritative source (a standards body, an official vuln database) edges
+    // ahead of a forum post of equal relevance, without ever burying a strong
+    // lexical match from a low-trust source.
+    if (r.origin !== 'index') score += 0.7 * (sourceTrust(r) - 0.5);
 
     // Freshness for dated material.
     if (r.archivedDate) {
