@@ -53,11 +53,19 @@ export class OsvProvider implements SearchProvider {
     const id = vulnId(query, ctx);
     if (!id) return [];
     const terms = tokenize(query);
-    const vuln = await fetchJson<OsvVuln>(`https://api.osv.dev/v1/vulns/${encodeURIComponent(id)}`, {
-      timeoutMs: this.timeoutMs,
-      signal: ctx.signal,
-      fetchImpl: this.opts.fetchImpl,
-    });
+    let vuln: OsvVuln;
+    try {
+      vuln = await fetchJson<OsvVuln>(`https://api.osv.dev/v1/vulns/${encodeURIComponent(id)}`, {
+        timeoutMs: this.timeoutMs,
+        signal: ctx.signal,
+        fetchImpl: this.opts.fetchImpl,
+      });
+    } catch (error) {
+      // OSV returns 404 for a CVE it hasn't imported — that's an empty result,
+      // not a provider failure, so it must not count toward the circuit breaker.
+      if (error instanceof Error && /\b404\b/.test(error.message)) return [];
+      throw error;
+    }
     if (!vuln?.id) return [];
     const severity = vuln.severity?.map((s) => `${s.type} ${s.score}`).join(', ');
     const advisory = vuln.references?.find((r) => r.type === 'ADVISORY')?.url;

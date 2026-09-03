@@ -59,7 +59,16 @@ export function inspectTls(host: string, opts: TlsLookupOptions): Promise<TlsInf
           finish({ available: false, error: 'no certificate presented', altNames: [] });
           return;
         }
-        const validTo = cert.valid_to ? new Date(cert.valid_to) : undefined;
+        // Node's cert date strings normally parse, but guard so an unparseable
+        // value can't throw `RangeError` from `.toISOString()` inside this
+        // listener (which would be an uncaught exception, not routed to finish).
+        const parseCertDate = (raw: string | undefined): Date | undefined => {
+          if (!raw) return undefined;
+          const d = new Date(raw);
+          return Number.isNaN(d.getTime()) ? undefined : d;
+        };
+        const validFrom = parseCertDate(cert.valid_from);
+        const validTo = parseCertDate(cert.valid_to);
         const daysUntilExpiry = validTo
           ? Math.round((validTo.getTime() - Date.now()) / 86_400_000)
           : undefined;
@@ -71,7 +80,7 @@ export function inspectTls(host: string, opts: TlsLookupOptions): Promise<TlsInf
             .split(',')
             .map((s) => s.trim().replace(/^DNS:/, ''))
             .filter(Boolean),
-          validFrom: cert.valid_from ? new Date(cert.valid_from).toISOString() : undefined,
+          validFrom: validFrom?.toISOString(),
           validTo: validTo?.toISOString(),
           daysUntilExpiry,
           protocol: socket.getProtocol() ?? undefined,

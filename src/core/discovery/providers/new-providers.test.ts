@@ -181,6 +181,12 @@ describe('security providers', () => {
     expect(await p.search('web frameworks', ctx('web frameworks'))).toEqual([]);
   });
 
+  it('OSV treats a 404 as an empty result, not a failure', async () => {
+    const notFound = (async () => new Response('not found', { status: 404 })) as unknown as typeof fetch;
+    const p = new OsvProvider({ fetchImpl: notFound });
+    await expect(p.search('CVE-2999-99999', ctx('CVE-2999-99999'))).resolves.toEqual([]);
+  });
+
   it('NVD handles a keyword security query', async () => {
     const p = new NvdProvider({
       fetchImpl: jsonFetch({
