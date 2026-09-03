@@ -88,6 +88,20 @@ describe('HTTP API', () => {
     expect(body.warnings.join(' ')).toContain('web search is not configured');
   });
 
+  it('answers a self-contained calculation directly, with no sources', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/answer?q=15%25%20of%20200' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.synthesizer).toBe('calculator');
+    expect(body.confidence).toBe('high');
+    expect(body.calculation).toMatchObject({ kind: 'percentage', value: 30 });
+    expect(body.sources).toEqual([]);
+
+    const conv = await app.inject({ method: 'GET', url: '/api/answer?q=10+km+to+miles' });
+    expect(conv.json().calculation.kind).toBe('unit-conversion');
+    expect(conv.json().answer).toMatch(/6\.21/);
+  });
+
   it('returns 404 for /api/answer when answer synthesis is disabled', async () => {
     const config = loadConfig({
       indexFile: path.join(dir, 'index2.json'),

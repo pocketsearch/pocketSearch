@@ -653,9 +653,20 @@ function AnswerCard({
 
       {data && (
         <>
-          <p className="answer__reason">{data.confidenceReason}</p>
+          {data.calculation && (
+            <div className="answer__calc">
+              <span className="answer__calc-expr">{data.calculation.expression}</span>
+              <span className="answer__calc-eq">=</span>
+              <span className="answer__calc-val">{data.calculation.formatted}</span>
+              {data.calculation.detail && (
+                <span className="answer__calc-note">{data.calculation.detail}</span>
+              )}
+            </div>
+          )}
 
-          {data.claims.length > 0 ? (
+          {!data.calculation && <p className="answer__reason">{data.confidenceReason}</p>}
+
+          {data.calculation ? null : data.claims.length > 0 ? (
             <p className="answer__body">
               {data.claims.map((claim, i) => (
                 <span key={i} className={claim.supported ? 'claim' : 'claim claim--unverified'}>
@@ -706,6 +717,48 @@ function AnswerCard({
             </ol>
           )}
 
+          {data.analysis && (
+            <div className="answer__analysis">
+              <div className="answer__analysis-row">
+                <span className="answer__analysis-k">Source agreement</span>
+                <span className="answer__analysis-v">
+                  {data.analysis.consensus.agreementPct}% · {data.analysis.consensus.note} (
+                  {data.analysis.consensus.distinctSources} distinct)
+                </span>
+              </div>
+              {data.analysis.contradictions.length > 0 && (
+                <div className="answer__analysis-row">
+                  <span className="answer__analysis-k">Possible conflicts</span>
+                  <ul className="answer__conflicts">
+                    {data.analysis.contradictions.map((c, i) => (
+                      <li key={i}>
+                        <a href={`#answer-src-${c.a.id}`} className="cite">
+                          [{c.a.id}]
+                        </a>{' '}
+                        vs{' '}
+                        <a href={`#answer-src-${c.b.id}`} className="cite">
+                          [{c.b.id}]
+                        </a>{' '}
+                        — {c.note}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.analysis.bias.some((b) => !b.signals.includes('neutral')) && (
+                <div className="answer__analysis-row">
+                  <span className="answer__analysis-k">Source slant</span>
+                  <span className="answer__analysis-v">
+                    {data.analysis.bias
+                      .filter((b) => !b.signals.includes('neutral'))
+                      .map((b) => `[${b.id}] ${b.signals.join(', ')}`)
+                      .join(' · ')}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {data.warnings.length > 0 && (
             <ul className="answer__warnings">
               {data.warnings.map((warning, i) => (
@@ -715,9 +768,11 @@ function AnswerCard({
           )}
 
           <p className="answer__foot">
-            {data.synthesizer === 'extractive'
-              ? 'assembled from source extracts (no LLM configured)'
-              : `woven by ${data.synthesizer.replace('llm-', '')}`}
+            {data.synthesizer === 'calculator'
+              ? 'computed directly'
+              : data.synthesizer === 'extractive'
+                ? 'assembled from source extracts (no LLM configured)'
+                : `woven by ${data.synthesizer.replace('llm-', '')}`}
             {' · '}
             {data.sources.length} source{data.sources.length === 1 ? '' : 's'}
             {' · '}

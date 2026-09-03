@@ -72,11 +72,17 @@ grounded Q&A; a chat tab would be UI work the user excluded).
   full provider roster.
 - Tests: `trust.test.ts`, `providers/new-providers.test.ts`, 2 new `rank.test.ts`.
 
-### Phase 2 — answer intelligence (no schema changes)
-- Calculator pre-step (feature 3): deterministic, before retrieval; returns an answer card.
-- Cross-source consensus / contradiction / bias annotations (feature 4) attached to
-  `AnswerResponse`; UI already renders answer metadata blocks — additive fields only.
-- Comparison-query detection (feature 5) → routes to entity-pivot expansion.
+### Phase 2 — answer intelligence (no schema changes)  ✅ done
+- `answer/calculator.ts` — arithmetic (recursive-descent parser, no `eval`),
+  percentages, unit conversions. Pre-retrieval; `synthesizer: "calculator"`,
+  `calculation` field, `confidence: high`, no sources.
+- `answer/analysis.ts` — consensus / contradictions / bias over the answer's
+  sources (≥ 2), attached as `AnswerResponse.analysis`. Additive only.
+- `discovery/comparison.ts` — "X vs Y" detection wired into `expand.ts` so each
+  side is also searched on its own.
+- Web UI: calculation result block + analysis block in the answer card.
+- Tests: `calculator.test.ts`, `analysis.test.ts`, `comparison.test.ts`, plus an
+  `/api/answer` calculator case. 234 pass.
 
 ### Phase 3 — knowledge/learning store (adds persistence)
 - New `src/core/knowledge/` module with its own store. Decision needed: **reuse the

@@ -8,6 +8,22 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Inline calculator** (`src/core/answer/calculator.ts`): `GET /api/answer` now
+  answers a self-contained calculation directly, before any retrieval —
+  arithmetic (`2^10`, `sqrt(144)`, `3 + 4 * 2`, `pi`/`e`), percentages
+  (`15% of 200`, `30 as a percentage of 120`, `200 increased by 10%`) and unit
+  conversions (`10 km to miles`, `100 c to f`, `5 kg in lb`, `1 gb to mb`).
+  Arithmetic runs through a small recursive-descent parser, never `eval`.
+  Response gains `synthesizer: "calculator"` and a `calculation` object.
+- **Cross-source analysis** (`src/core/answer/analysis.ts`, ported from
+  `backpocketsearch`): answers with ≥ 2 sources carry an `analysis` object —
+  consensus (mean pairwise extract overlap), up to 3 contradictions (negation or
+  figure clash between sources), and per-source bias tags. Additive; never
+  changes the answer or its confidence.
+- **Comparison-query expansion** (`src/core/discovery/comparison.ts`): "X vs Y" /
+  "difference between X and Y" / "compare X and Y" queries also fan out to each
+  side on its own, so the cascade has material on both.
+
 - **12 more keyless discovery providers** (`src/core/discovery/providers/`):
   Wikidata (`wbsearchentities`), DuckDuckGo Instant Answer, Stack Overflow
   (Stack Exchange API), GitHub repositories, npm registry search, PyPI
