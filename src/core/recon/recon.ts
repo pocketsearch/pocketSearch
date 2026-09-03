@@ -384,8 +384,11 @@ function facts(x: {
   if (x.registration?.registrar) out.push(`Registrar: ${x.registration.registrar}`);
   if (x.registration?.createdAt) out.push(`Registered: ${x.registration.createdAt.slice(0, 10)}`);
   if (x.dns?.NS.length) out.push(`Nameservers: ${x.dns.NS.slice(0, 3).join(', ')}`);
-  // Drop RFC 7505 "null MX" (`0 .` / `0`) — it means the domain sends/receives no mail.
-  const mx = (x.dns?.MX ?? []).filter((r) => !/^0\s*\.?$/.test(r.trim()));
+  // MX rdata is "<priority> <host>"; show just the hosts, and treat RFC 7505
+  // "null MX" (`0 .` / `0`) as no mail.
+  const mx = (x.dns?.MX ?? [])
+    .map((r) => r.trim().replace(/^\d+\s+/, '').replace(/\.$/, ''))
+    .filter((host) => host && host !== '');
   if (mx.length) out.push(`Mail: ${mx.slice(0, 2).join(', ')}`);
   else if (x.dns?.MX.length) out.push('Mail: none (null MX)');
   if (x.http?.server) out.push(`Server: ${x.http.server}`);
