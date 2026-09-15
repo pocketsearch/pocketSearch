@@ -57,6 +57,53 @@ describe('rank', () => {
     expect(top?.url).toContain('zorblax');
   });
 
+  it('bounds a runaway provider score so it cannot bury other results', () => {
+    const q = 'log4shell';
+    const inflated = mk({
+      title: 'log4shell notes',
+      url: 'https://blog.example/log4shell',
+      snippet: 'log4shell',
+      origin: 'index',
+      score: 500, // e.g. a raw MiniSearch value on an auto-indexed page
+    });
+    const authoritative = mk({
+      title: 'log4shell advisory',
+      url: 'https://nvd.example/log4shell',
+      snippet: 'log4shell remote code execution',
+      origin: 'web',
+      score: 0.9,
+      // pretend NVD surfaced it
+    });
+    authoritative.foundVia = ['NVD'];
+    const ranked = rank([inflated, authoritative], { query: q, classification: classifyQuery(q) });
+    // the inflated one may still lead, but not by the raw 500-point margin
+    const top = ranked[0]!;
+    const second = ranked[1]!;
+    expect(top.score - second.score).toBeLessThan(10);
+  });
+
+  it('nudges a higher-trust source ahead of an equal-relevance forum post', () => {
+    const q = 'sql injection mitigation';
+    const forum = mk({
+      title: 'sql injection mitigation',
+      url: 'https://forum.example/thread',
+      snippet: 'sql injection mitigation discussion',
+      origin: 'web',
+      score: 0.5,
+    });
+    forum.foundVia = ['Hacker News'];
+    const official = mk({
+      title: 'sql injection mitigation',
+      url: 'https://owasp.example/sqli',
+      snippet: 'sql injection mitigation discussion',
+      origin: 'web',
+      score: 0.5,
+    });
+    official.foundVia = ['NVD'];
+    const [top] = rank([forum, official], { query: q, classification: classifyQuery(q) });
+    expect(top?.foundVia).toEqual(['NVD']);
+  });
+
   it('suggestions always sort last', () => {
     const ranked = rank(
       [

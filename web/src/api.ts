@@ -3,6 +3,7 @@
 // erased at build time — the web bundle never pulls in backend code.
 import type { BeaconDocument, IndexStats, SearchHit, SearchResponse } from '@core/types';
 import type { PlateCheck } from '@core/plate/types';
+import type { ReconReport } from '@core/recon/types';
 import type { OrchestratedResponse, UnifiedResult } from '@core/discovery/types';
 import type {
   AnswerClaim,
@@ -21,6 +22,7 @@ export type {
   IndexStats,
   OrchestratedResponse,
   PlateCheck,
+  ReconReport,
   SearchHit,
   SearchResponse,
   TrustTier,
@@ -32,6 +34,7 @@ export interface HealthResponse {
   documents: number;
   uptimeSeconds: number;
   answer: { enabled: boolean; webSearch: string | null; llm: string[] };
+  recon?: { enabled: boolean; whois?: boolean; allowPrivateHosts?: boolean };
 }
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -137,5 +140,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(params),
     });
+  },
+  recon(
+    params: { target: string; index?: boolean } & Partial<
+      Record<'registration' | 'tls' | 'http' | 'robots' | 'subdomains' | 'ipGeo', boolean>
+    >,
+    signal?: AbortSignal,
+  ): Promise<ReconReport> {
+    const qs = new URLSearchParams({ target: params.target });
+    for (const key of ['registration', 'tls', 'http', 'robots', 'subdomains', 'ipGeo'] as const) {
+      if (params[key] === false) qs.set(key, '0');
+    }
+    if (params.index) qs.set('index', '1');
+    return request<ReconReport>(`/api/recon?${qs.toString()}`, { signal });
   },
 };

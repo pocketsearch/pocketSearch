@@ -5,14 +5,15 @@ No database, no external services — the index lives in memory and is persisted
 single JSON file. Runs anywhere Node.js 20+ runs, or as a Docker container.
 
 - **Full-text search** with prefix + fuzzy matching, title/tag boosting, tag facets and highlighted snippets (powered by [MiniSearch](https://github.com/lucaong/minisearch)).
-- **Discovery cascade** — a query the local index can't answer fans out to public, no-key sources (Wikipedia, Wayback Machine, Common Crawl, Hacker News, certificate transparency) plus any configured web search, with query expansion, entity pivots, circuit breakers and result caching. A valid query **never dead-ends on "no results"** — worst case it returns related material or real search shortcuts. See [docs/discovery.md](docs/discovery.md).
-- **Answer weave** — question-like queries also get a short written answer built _only_ from retrieved sources (index pages + optional live web search), with per-sentence citations, domain trust tiers, retrieval timestamps and a confidence banner. Works offline as a deterministic weave; upgrades to prose with an LLM key.
+- **Discovery cascade** — a query the local index can't answer fans out to ~18 public, no-key sources (Wikipedia, Wikidata, DuckDuckGo, Stack Overflow, GitHub, npm, PyPI, OpenAlex, OpenStreetMap, Hacker News, Wayback Machine, Common Crawl, certificate transparency, and the OSV/GitHub-Advisories/NVD/CISA-KEV vulnerability databases) plus any configured web search, with query expansion, entity pivots, source-trust weighting, circuit breakers and result caching. A valid query **never dead-ends on "no results"** — worst case it returns related material or real search shortcuts. See [docs/discovery.md](docs/discovery.md).
+- **Answer weave** — question-like queries also get a short written answer built _only_ from retrieved sources (index pages + optional live web search), with per-sentence citations, domain trust tiers, retrieval timestamps, a confidence banner, and cross-source consensus / contradiction / bias analysis. Self-contained sums, percentages and unit conversions are answered directly by an inline calculator. Works offline as a deterministic weave; upgrades to prose with an LLM key.
 - **UK number plate checker** with automatic backend checks — format, age identifier, DVLA region, and (with free API keys) DVLA tax/MOT status and DVSA MOT history.
-- **MCP server** (`beacon-mcp`, built on [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)) exposing the plate checker and the index as tools for Claude & other MCP clients.
+- **Passive recon** — profile a domain / IP / URL from public data only: DNS (+ SPF/DMARC), RDAP/`whois`, the served TLS certificate, HTTP security-header grade + technology fingerprint, `robots.txt` / `sitemap.xml`, `crt.sh` subdomains, and IP geolocation. No port scanning or probing. See [docs/recon.md](docs/recon.md).
+- **MCP server** (`beacon-mcp`, built on [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)) exposing the plate checker, the recon toolset and the index as tools for Claude & other MCP clients.
 - **REST API** built on [Fastify](https://fastify.dev/) with schema validation.
 - **Web UI** (React + Vite) for searching, plate checks, adding documents and crawling sites.
 - **Built-in crawler** that indexes a website's pages and respects `robots.txt`.
-- **CLI** (`beacon`) for scripting: add, import, crawl, search, stats, plate.
+- **CLI** (`beacon`) for scripting: add, import, crawl, search, stats, plate, recon.
 - **Zero-config**: every setting has a sane default. Point it at content and go.
 
 ---
@@ -22,8 +23,8 @@ single JSON file. Runs anywhere Node.js 20+ runs, or as a Docker container.
 ### With Node.js
 
 ```bash
-git clone https://github.com/abbieymatthews030-star/abeaconsearch.git
-cd abeaconsearch
+git clone https://github.com/pocketsearch/pocketSearch.git
+cd pocketSearch
 npm install
 npm run build
 npm start
@@ -152,6 +153,27 @@ curl 'http://localhost:7700/api/plate/AB12CDE?vehicle=false&mot=false'
 
 Set `BEACON_PLATE_INDEX_RESULTS=true` (or pass `index=true`) to save every check
 into the search index as a `plate-check` document — so past checks are searchable.
+
+---
+
+## Passive recon
+
+Profile a domain, IP address, or URL from data the host publishes to anyone — DNS
+(with SPF/DMARC), RDAP/`whois`, the served TLS certificate, HTTP security-header
+grade and technology fingerprint, `robots.txt` / `sitemap.xml`, `crt.sh`
+subdomains, and IP geolocation. **Passive only**: DNS lookups, one TLS handshake,
+and ordinary GET requests — no port scanning, no probing. No API keys.
+
+```bash
+beacon recon example.com                    # human-readable report
+beacon recon 8.8.8.8 --json                 # JSON
+beacon recon example.com --no-subdomains --index
+curl 'http://localhost:7700/api/recon?target=example.com'
+```
+
+Targets on private / loopback addresses are refused over HTTP unless
+`BEACON_RECON_ALLOW_PRIVATE=1` (the CLI always allows them). Full reference:
+[docs/recon.md](docs/recon.md).
 
 ---
 

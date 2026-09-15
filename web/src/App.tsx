@@ -7,11 +7,12 @@ import {
   type IndexStats,
   type OrchestratedResponse,
   type PlateCheck,
+  type ReconReport,
   type TrustTier,
   type UnifiedResult,
 } from './api';
 
-type Tab = 'search' | 'plate' | 'add' | 'crawl' | 'about';
+type Tab = 'search' | 'plate' | 'recon' | 'add' | 'crawl' | 'about';
 
 const PAGE_SIZE = 10;
 
@@ -122,6 +123,7 @@ export function App(): JSX.Element {
             [
               ['search', 'Search'],
               ['plate', 'Plate check'],
+              ['recon', 'Recon'],
               ['add', 'Add document'],
               ['crawl', 'Crawl site'],
               ['about', 'About'],
@@ -142,6 +144,7 @@ export function App(): JSX.Element {
       <main className="app__main">
         {tab === 'search' && <SearchView />}
         {tab === 'plate' && <PlateView onDone={refreshStats} />}
+        {tab === 'recon' && <ReconView onDone={refreshStats} />}
         {tab === 'add' && <AddView onDone={refreshStats} />}
         {tab === 'crawl' && <CrawlView onDone={refreshStats} />}
         {tab === 'about' && <AboutView />}
@@ -650,9 +653,20 @@ function AnswerCard({
 
       {data && (
         <>
-          <p className="answer__reason">{data.confidenceReason}</p>
+          {data.calculation && (
+            <div className="answer__calc">
+              <span className="answer__calc-expr">{data.calculation.expression}</span>
+              <span className="answer__calc-eq">=</span>
+              <span className="answer__calc-val">{data.calculation.formatted}</span>
+              {data.calculation.detail && (
+                <span className="answer__calc-note">{data.calculation.detail}</span>
+              )}
+            </div>
+          )}
 
-          {data.claims.length > 0 ? (
+          {!data.calculation && <p className="answer__reason">{data.confidenceReason}</p>}
+
+          {data.calculation ? null : data.claims.length > 0 ? (
             <p className="answer__body">
               {data.claims.map((claim, i) => (
                 <span key={i} className={claim.supported ? 'claim' : 'claim claim--unverified'}>
@@ -703,6 +717,48 @@ function AnswerCard({
             </ol>
           )}
 
+          {data.analysis && (
+            <div className="answer__analysis">
+              <div className="answer__analysis-row">
+                <span className="answer__analysis-k">Source agreement</span>
+                <span className="answer__analysis-v">
+                  {data.analysis.consensus.agreementPct}% · {data.analysis.consensus.note} (
+                  {data.analysis.consensus.distinctSources} distinct)
+                </span>
+              </div>
+              {data.analysis.contradictions.length > 0 && (
+                <div className="answer__analysis-row">
+                  <span className="answer__analysis-k">Possible conflicts</span>
+                  <ul className="answer__conflicts">
+                    {data.analysis.contradictions.map((c, i) => (
+                      <li key={i}>
+                        <a href={`#answer-src-${c.a.id}`} className="cite">
+                          [{c.a.id}]
+                        </a>{' '}
+                        vs{' '}
+                        <a href={`#answer-src-${c.b.id}`} className="cite">
+                          [{c.b.id}]
+                        </a>{' '}
+                        — {c.note}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.analysis.bias.some((b) => !b.signals.includes('neutral')) && (
+                <div className="answer__analysis-row">
+                  <span className="answer__analysis-k">Source slant</span>
+                  <span className="answer__analysis-v">
+                    {data.analysis.bias
+                      .filter((b) => !b.signals.includes('neutral'))
+                      .map((b) => `[${b.id}] ${b.signals.join(', ')}`)
+                      .join(' · ')}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {data.warnings.length > 0 && (
             <ul className="answer__warnings">
               {data.warnings.map((warning, i) => (
@@ -712,9 +768,11 @@ function AnswerCard({
           )}
 
           <p className="answer__foot">
-            {data.synthesizer === 'extractive'
-              ? 'assembled from source extracts (no LLM configured)'
-              : `woven by ${data.synthesizer.replace('llm-', '')}`}
+            {data.synthesizer === 'calculator'
+              ? 'computed directly'
+              : data.synthesizer === 'extractive'
+                ? 'assembled from source extracts (no LLM configured)'
+                : `woven by ${data.synthesizer.replace('llm-', '')}`}
             {' · '}
             {data.sources.length} source{data.sources.length === 1 ? '' : 's'}
             {' · '}
@@ -1022,6 +1080,158 @@ function PlateView({ onDone }: { onDone: () => void }): JSX.Element {
                 ))}
               </ul>
             </details>
+          )}
+
+          <p className="plate__sources">Sources: {report.sources.join(', ')}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ReconView({ onDone }: { onDone: () => void }): JSX.Element {
+  const [input, setInput] = useState('');
+  const [index, setIndex] = useState(false);
+  const [report, setReport] = useState<ReconReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    api
+      .recon({ target: input.trim(), index })
+      .then((res) => {
+        setReport(res);
+        if (index) onDone();
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Recon failed'))
+      .finally(() => setBusy(false));
+  };
+
+  const worst = report?.summary.fail
+    ? 'fail'
+    : report?.summary.warn
+      ? 'attention'
+      : report
+        ? 'ok'
+        : 'ok';
+  const badgeClass =
+    worst === 'ok' ? 'badge badge--ok' : worst === 'attention' ? 'badge badge--warn' : 'badge badge--fail';
+
+  return (
+    <section className="plate">
+      <form className="plate__form" onSubmit={submit}>
+        <input
+          className="plate__input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="example.com  ·  8.8.8.8  ·  https://site.tld"
+          aria-label="Recon target"
+          maxLength={2048}
+          autoFocus
+        />
+        <button type="submit" className="btn" disabled={busy || input.trim() === ''}>
+          {busy ? 'Scanning…' : 'Run recon'}
+        </button>
+      </form>
+      <div className="plate__opts">
+        <label>
+          <input type="checkbox" checked={index} onChange={(e) => setIndex(e.target.checked)} /> Save
+          to index
+        </label>
+        <span className="plate__desc">
+          Passive only — DNS, RDAP/WHOIS, TLS, headers, tech, robots, crt.sh, IP geo.
+        </span>
+      </div>
+
+      {error && <p className="notice notice--error">{error}</p>}
+
+      {report && (
+        <div className="plate__report">
+          <div className="plate__headline">
+            <span className={badgeClass}>{worst}</span>
+            <div>
+              <strong className="plate__mark">{report.target.host}</strong>
+              <span className="plate__desc">{report.summary.headline}</span>
+            </div>
+          </div>
+
+          {report.summary.facts.length > 0 && (
+            <dl className="plate__facts">
+              {report.summary.facts.map((fact) => {
+                const [dt, ...rest] = fact.split(': ');
+                return (
+                  <div key={fact}>
+                    <dt>{dt}</dt>
+                    <dd>{rest.join(': ') || '—'}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          )}
+
+          <ul className="checks">
+            {report.findings.map((finding) => (
+              <li key={finding.id} className={`checks__item checks__item--${finding.status}`}>
+                <span className="checks__icon" aria-hidden>
+                  {STATUS_ICON[finding.status] ?? '[ -- ]'}
+                </span>
+                <span className="checks__label">{finding.label}</span>
+                <span className="checks__detail">{finding.detail}</span>
+              </li>
+            ))}
+          </ul>
+
+          {report.dns && (
+            <details className="plate__mot">
+              <summary>DNS records</summary>
+              <ul>
+                {(['A', 'AAAA', 'MX', 'NS', 'TXT', 'CNAME', 'SOA'] as const)
+                  .filter((k) => report.dns![k].length > 0)
+                  .map((k) => (
+                    <li key={k}>
+                      <strong>{k}</strong> — {report.dns![k].join(', ')}
+                    </li>
+                  ))}
+              </ul>
+            </details>
+          )}
+
+          {report.subdomains && report.subdomains.subdomains.length > 0 && (
+            <details className="plate__mot">
+              <summary>
+                Subdomains — {report.subdomains.totalFound} seen in certificate transparency
+              </summary>
+              <ul>
+                {report.subdomains.subdomains.slice(0, 60).map((host) => (
+                  <li key={host}>{host}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {report.tls?.available && (
+            <details className="plate__mot">
+              <summary>TLS certificate</summary>
+              <ul>
+                <li>Issuer — {report.tls.issuer}</li>
+                <li>Subject — {report.tls.subject}</li>
+                <li>
+                  Valid — {report.tls.validFrom?.slice(0, 10)} → {report.tls.validTo?.slice(0, 10)}
+                </li>
+                {report.tls.altNames.length > 0 && (
+                  <li>SANs — {report.tls.altNames.slice(0, 20).join(', ')}</li>
+                )}
+              </ul>
+            </details>
+          )}
+
+          {report.errors.length > 0 && (
+            <p className="notice notice--error">
+              Checks with errors: {report.errors.map((e) => e.check).join(', ')}
+            </p>
           )}
 
           <p className="plate__sources">Sources: {report.sources.join(', ')}</p>

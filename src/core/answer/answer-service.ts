@@ -1,6 +1,8 @@
 import type { AnswerConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import { normalizeWhitespace, tokenize } from '../text.js';
+import { analyzeSources } from './analysis.js';
+import { formatCalculation, tryCalculate } from './calculator.js';
 import {
   selectGroundedClaims,
   splitSentences,
@@ -132,6 +134,29 @@ export class AnswerService {
     startedAt: number,
   ): Promise<AnswerResponse> {
     const warnings: string[] = [];
+
+    // Inline calculator — a self-contained sum / percentage / unit conversion is
+    // answered deterministically, before any retrieval.
+    const calculation = tryCalculate(query);
+    if (calculation) {
+      return {
+        query,
+        answer: formatCalculation(calculation),
+        claims: [
+          { text: formatCalculation(calculation), sourceIds: [], supported: true },
+        ],
+        sources: [],
+        confidence: 'high',
+        confidenceReason: 'computed directly from the query',
+        synthesizer: 'calculator',
+        warnings,
+        generatedAt: this.now().toISOString(),
+        tookMs: Number((performance.now() - startedAt).toFixed(1)),
+        cached: false,
+        calculation,
+      };
+    }
+
     const { sources: gathered, warnings: gatherWarnings } = await gatherSources(query, {
       engine: this.deps.engine,
       webSearch: this.resolveWebSearch(),
@@ -158,15 +183,19 @@ export class AnswerService {
         AnswerResponse,
         'answer' | 'claims' | 'confidence' | 'confidenceReason' | 'synthesizer' | 'disclaimer'
       >,
-    ): AnswerResponse => ({
-      query,
-      sources: retrieved.map((s) => this.toPublicSource(s, grounded)),
-      warnings,
-      generatedAt: this.now().toISOString(),
-      tookMs: Number((performance.now() - startedAt).toFixed(1)),
-      cached: false,
-      ...partial,
-    });
+    ): AnswerResponse => {
+      const publicSources = retrieved.map((s) => this.toPublicSource(s, grounded));
+      return {
+        query,
+        sources: publicSources,
+        warnings,
+        generatedAt: this.now().toISOString(),
+        tookMs: Number((performance.now() - startedAt).toFixed(1)),
+        cached: false,
+        analysis: analyzeSources(publicSources) ?? undefined,
+        ...partial,
+      };
+    };
 
     if (retrieved.length === 0) {
       return finish({

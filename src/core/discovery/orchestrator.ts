@@ -347,6 +347,10 @@ export class Orchestrator {
     const runStage = async (
       name: string,
       tasks: Array<{ provider: SearchProvider; q: string }>,
+      // Cap concurrent provider calls per stage. Stage 1 fans out to every
+      // supported provider once, so it needs headroom for the full roster;
+      // the expansion / pivot stages multiply by query variants and stay tight.
+      maxTasks = 12,
     ): Promise<void> => {
       const seen = new Set<string>();
       const unique = tasks.filter((t) => {
@@ -360,7 +364,7 @@ export class Orchestrator {
       fallbackStage = Math.max(fallbackStage, STAGE_NUMBER[name] ?? fallbackStage);
       const settled = await Promise.all(
         unique
-          .slice(0, 12)
+          .slice(0, maxTasks)
           .map((t) => runProvider(t.provider, t.q, ctxBase, { breakers: this.breakers, logger: this.deps.logger, queryId })),
       );
       for (const { results, report } of settled) {
@@ -370,7 +374,9 @@ export class Orchestrator {
     };
 
     const fast = this.deps.providers.filter(
-      (p) => ['local', 'general_web', 'reference', 'code'].includes(p.category) && supports(p),
+      (p) =>
+        ['local', 'general_web', 'reference', 'code', 'academic'].includes(p.category) &&
+        supports(p),
     );
     const archives = this.deps.providers.filter(
       (p) => ['archives', 'infrastructure'].includes(p.category) && supports(p),
@@ -383,6 +389,7 @@ export class Orchestrator {
     await runStage(
       'exact',
       fast.flatMap((p) => stage1Queries.map((q) => ({ provider: p, q }))),
+      Math.max(24, fast.length * stage1Queries.length),
     );
     if (!ctxBase.deep && !insufficient(this.snapshot(acc), query)) {
       return this.finish(acc, reports, stagesRun, fallbackStage);
@@ -398,13 +405,14 @@ export class Orchestrator {
       return this.finish(acc, reports, stagesRun, fallbackStage);
     }
 
-    // STAGE 3 — broader discovery (archives, CT logs)
+    // STAGE 3 — broader discovery (archives, CT logs, vulnerability databases)
     await runStage(
       'discovery',
       archives.flatMap((p) => [
         { provider: p, q: query },
         ...(cls.entities.rootDomain ? [{ provider: p, q: cls.entities.rootDomain }] : []),
       ]),
+      Math.max(16, archives.length * 2),
     );
     if (!ctxBase.deep && !insufficient(this.snapshot(acc), query)) {
       return this.finish(acc, reports, stagesRun, fallbackStage);

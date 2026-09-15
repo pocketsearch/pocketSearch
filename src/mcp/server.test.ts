@@ -50,7 +50,7 @@ describe('Beacon MCP server', () => {
     await client.close();
   });
 
-  it('exposes the plate and beacon tools', async () => {
+  it('exposes the plate, recon and beacon tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
@@ -61,7 +61,9 @@ describe('Beacon MCP server', () => {
         'check_number_plate',
         'decode_plate',
         'dvla_vehicle_enquiry',
+        'geolocate_ip',
         'mot_history',
+        'recon_target',
         'validate_plate_format',
       ].sort(),
     );

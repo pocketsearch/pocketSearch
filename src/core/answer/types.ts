@@ -4,6 +4,12 @@
  * `@core` path alias (type-only import, erased at build time).
  */
 
+import type { CrossSourceAnalysis } from './analysis.js';
+import type { CalculationResult } from './calculator.js';
+
+export type { CrossSourceAnalysis, SourceBias, SourceContradiction, BiasSignal } from './analysis.js';
+export type { CalculationResult, CalculationKind } from './calculator.js';
+
 /** How much a source can be trusted, roughly. */
 export type TrustTier = 'official' | 'established' | 'community' | 'unverified';
 
@@ -11,7 +17,7 @@ export type TrustTier = 'official' | 'established' | 'community' | 'unverified';
 export type AnswerConfidence = 'high' | 'medium' | 'low' | 'none';
 
 /** Which mechanism produced the prose. */
-export type Synthesizer = 'llm-anthropic' | 'llm-openai' | 'extractive';
+export type Synthesizer = 'llm-anthropic' | 'llm-openai' | 'extractive' | 'calculator';
 
 /** A single source that backs part of the answer. */
 export interface AnswerSource {
@@ -60,4 +66,14 @@ export interface AnswerResponse {
   tookMs: number;
   /** True when this response was served from the short-lived answer cache. */
   cached: boolean;
+  /**
+   * Present when the query was a self-contained calculation (arithmetic, a
+   * percentage, or a unit conversion) — answered deterministically, no sources.
+   */
+  calculation?: CalculationResult;
+  /**
+   * Cross-source agreement / contradiction / bias signals for the sources that
+   * back {@link answer}. Present only when there are at least two sources.
+   */
+  analysis?: CrossSourceAnalysis;
 }

@@ -1,3 +1,4 @@
+import { splitComparison } from './comparison.js';
 import type { QueryClassification } from './types.js';
 
 /** Common acronym expansions — small, high-value set; extend as needed. */
@@ -32,6 +33,14 @@ export function expandQuery(raw: string, cls: QueryClassification): string[] {
     const t = (v ?? '').trim();
     if (t && t.toLowerCase() !== q.toLowerCase() && t.length >= 2) variants.add(t);
   };
+
+  // Comparison queries ("X vs Y") — search each side on its own too, so the
+  // cascade has material on both. Added first so they survive the stage cap.
+  const comparison = splitComparison(q);
+  if (comparison) {
+    add(comparison.a);
+    add(comparison.b);
+  }
 
   const unquoted = q.replace(/["']/g, '').trim();
   add(unquoted);

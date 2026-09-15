@@ -19,9 +19,9 @@ longer "insufficient" (`< 5 useful results`, single-source, or no strong match �
 
 | Stage | What runs |
 | ----- | --------- |
-| 1 — exact | local index + web-search + Wikipedia + Hacker News, on the raw & normalized query |
+| 1 — exact | local index + web-search + the fast keyless providers (Wikipedia, Wikidata, DuckDuckGo, Stack Overflow, GitHub, npm, PyPI, OpenAlex, OpenStreetMap, Hacker News), on the raw & normalized query |
 | 2 — expansion | the same fast providers on generated variants (`expand.ts`): unquoted, punctuation-stripped, unicode-folded, singular/plural, acronym, reordered, date-free, quoted-phrase, plus entity-derived (root domain, hostname, path terms, email local-part, …) |
-| 3 — discovery | Wayback CDX, Common Crawl URL index, certificate transparency (crt.sh) |
+| 3 — discovery | Wayback CDX, Common Crawl URL index, certificate transparency (crt.sh), and the vulnerability databases (OSV.dev, GitHub Advisories, NVD, CISA KEV) for CVE / security-flavoured queries |
 | 4 — entity pivot | classification-driven queries — root domain / subdomains for a domain, path terms for a URL, handle-as-words for a username, local-part for an email |
 | 5 — persist | fetch the top few new public pages through the robots + SSRF-guard stack and add them to the local index (best-effort, `BEACON_DISCOVERY_CRAWL`) |
 | 6 — related & suggestions | weak exacts are demoted to *related*; real query-derived search shortcuts are always appended as the floor (`suggestions.ts`) |
@@ -36,19 +36,36 @@ the call against its deadline, isolates errors, and drives a **circuit breaker**
 `misconfigured`). One slow or failing provider can never break the search or
 return a 500.
 
-No-key providers, always on: **Local index, Wikipedia, Wayback Machine, Common
-Crawl, Hacker News, Certificate Transparency**. The configured web-search
-provider (Brave / Tavily / SearXNG — reused from the answer layer) joins the
-`general_web` group when its key/URL is set.
+No-key providers, always on:
+
+| Group | Providers |
+| ----- | --------- |
+| Local | Local index |
+| Reference | Wikipedia, Wikidata, DuckDuckGo Instant Answer, OpenStreetMap (Nominatim) |
+| Code / packages | GitHub repositories, Stack Overflow, npm, PyPI, Hacker News |
+| Academic | OpenAlex |
+| Archives | Wayback Machine, Common Crawl |
+| Infrastructure / vulnerabilities | Certificate Transparency (crt.sh), OSV.dev, GitHub Advisories, NVD, CISA KEV |
+
+The configured web-search provider (Brave / Tavily / SearXNG — reused from the
+answer layer) joins the `general_web` group when its key/URL is set.
+
+Some providers are query-aware: OpenStreetMap only runs for place-like queries,
+PyPI only resolves exact package names, and the four vulnerability databases only
+run for a CVE / GHSA id or an explicitly security-flavoured query.
 
 Adding one: implement `SearchProvider`, register it in `providers/index.ts`.
-GitHub, GitLab, OpenAlex, Crossref, Wikidata, GDELT, RDAP, sitemap and RSS
-adapters slot in the same way.
+GitLab, Crossref, GDELT, RDAP, sitemap and RSS adapters slot in the same way.
 
 ## Ranking (`rank.ts`)
 
 Not a popularity ranking. Score =
-`relevance + title match + provider confidence + entity match + rarity + corroboration + freshness + scaled local-confidence − duplicate/diversity penalty`.
+`relevance + title match + bounded provider confidence + entity match + rarity + corroboration + source-trust nudge + freshness + scaled local-confidence − duplicate/diversity penalty`.
+The provider-confidence term is capped so a raw upstream relevance value (e.g.
+MiniSearch's unnormalised score on an auto-indexed page) can't dominate, and a
+small **source-trust** weight (`trust.ts`, ported from `backpocketsearch`) lets
+an authoritative source — a standards body, an official vulnerability database —
+edge ahead of a forum post of equal relevance.
 Archive-only and specialist hits that match strongly get a **rarity boost** so
 they aren't buried under generic high-authority pages.
 

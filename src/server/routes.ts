@@ -6,6 +6,8 @@ import { crawl } from '../core/crawler.js';
 import type { Orchestrator } from '../core/discovery/index.js';
 import type { PlateChecker } from '../core/plate/checker.js';
 import { plateCheckToDocument } from '../core/plate/index.js';
+import type { ReconRunner } from '../core/recon/index.js';
+import { reconReportToDocument } from '../core/recon/index.js';
 import type { PersistentEngine } from '../core/store.js';
 import {
   answerQuerySchema,
@@ -14,6 +16,7 @@ import {
   crawlInputSchema,
   documentInputSchema,
   optionalBooleanParam,
+  reconQuerySchema,
   searchQuerySchema,
 } from '../core/types.js';
 
@@ -32,19 +35,26 @@ export interface RouteContext {
   config: Config;
   engine: PersistentEngine;
   plateChecker: PlateChecker;
+  reconRunner: ReconRunner | null;
   answerService: AnswerService | null;
   orchestrator: Orchestrator | null;
 }
 
 /** Canonical `/health` body, used by both `/health` and `/api/health`. */
 export function healthPayload(
-  ctx: Pick<RouteContext, 'engine' | 'plateChecker' | 'answerService' | 'orchestrator'>,
+  ctx: Pick<
+    RouteContext,
+    'engine' | 'plateChecker' | 'reconRunner' | 'answerService' | 'orchestrator'
+  >,
 ) {
   return {
     status: 'ok' as const,
     documents: ctx.engine.size,
     uptimeSeconds: Math.round(process.uptime()),
     plateChecks: ctx.plateChecker.capabilities,
+    recon: ctx.reconRunner
+      ? { enabled: true as const, ...ctx.reconRunner.capabilities }
+      : { enabled: false as const },
     answer: ctx.answerService
       ? ctx.answerService.capabilities
       : { enabled: false as const, webSearch: null, llm: [] as string[] },
@@ -202,6 +212,30 @@ export const apiRoutes = (ctx: RouteContext): FastifyPluginAsync => {
     app.post('/plate/check', async (request) => {
       const { plate, ...query } = plateCheckBodySchema.parse(request.body ?? {});
       return runPlateCheck(plate, query);
+    });
+
+    // --- Passive recon ------------------------------------------------------
+    app.get('/recon', async (request) => {
+      if (!ctx.reconRunner) throw new HttpError(404, 'recon is disabled');
+      const q = reconQuerySchema.parse(request.query);
+      let report;
+      try {
+        report = await ctx.reconRunner.run(q.target, {
+          includeRegistration: q.registration,
+          includeTls: q.tls,
+          includeHttp: q.http,
+          includeRobots: q.robots,
+          includeSubdomains: q.subdomains,
+          includeIpGeo: q.ipGeo,
+        });
+      } catch (error) {
+        throw new HttpError(400, error instanceof Error ? error.message : 'invalid recon target');
+      }
+      if (q.index ?? config.recon.indexResults) {
+        engine.upsert(reconReportToDocument(report));
+        await engine.flush();
+      }
+      return report;
     });
 
     app.post('/crawl', async (request) => {
