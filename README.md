@@ -1,4 +1,4 @@
-# 🔦 Beacon Search
+# Sourced
 
 A small, **fully open-source, self-hostable full-text search engine** with a web UI.
 No database, no external services — the index lives in memory and is persisted to a
@@ -35,14 +35,14 @@ npm start
 
 ```bash
 docker compose up --build
-# → http://localhost:7700   (index persisted in the `beacon-data` volume)
+# → http://localhost:7700   (index persisted in the `sourced-data` volume)
 ```
 
 or plain Docker:
 
 ```bash
-docker build -t abeaconsearch .
-docker run -p 7700:7700 -v beacon-data:/data abeaconsearch
+docker build -t sourced .
+docker run -p 7700:7700 -v sourced-data:/data sourced
 ```
 
 ### Development (API + UI with hot reload)
@@ -78,7 +78,7 @@ curl -X POST http://localhost:7700/api/documents \
 ```
 
 After building and installing globally (`npm link` or `npm i -g .`) the CLI is
-available as `beacon`.
+available as `sourced` (`beacon` remains supported).
 
 ---
 

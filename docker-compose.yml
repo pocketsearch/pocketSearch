@@ -1,7 +1,7 @@
 services:
-  beacon:
+  sourced:
     build: .
-    image: abeaconsearch:latest
+    image: sourced:latest
     ports:
       - '127.0.0.1:7700:7700'
     environment:

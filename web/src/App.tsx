@@ -89,7 +89,7 @@ function Beacon({ size = 200 }: { size?: number }): JSX.Element {
       width={size}
       height={size}
       role="img"
-      aria-label="Beacon"
+      aria-label="Sourced"
     >
       {dots}
       <circle cx={c} cy={c} r={size * 0.02} />
@@ -115,7 +115,7 @@ export function App(): JSX.Element {
       <header className="app__header">
         <div className="brand">
           <Beacon size={40} />
-          <h1>ABEACON</h1>
+          <h1>SOURCED</h1>
           <p>self-hostable full-text search</p>
         </div>
         <nav className="tabs" aria-label="Sections">
@@ -1244,9 +1244,9 @@ function ReconView({ onDone }: { onDone: () => void }): JSX.Element {
 function AboutView(): JSX.Element {
   return (
     <section className="prose">
-      <h2>About Beacon Search</h2>
+      <h2>About Sourced</h2>
       <p>
-        Beacon Search is a small, dependency-light search engine you can run anywhere Node.js runs.
+        Sourced is a small, dependency-light search engine you can run anywhere Node.js runs.
         It keeps a full-text index in memory (powered by MiniSearch) and persists it to a single
         JSON file — no database, no external services.
       </p>
