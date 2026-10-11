@@ -1,10 +1,10 @@
 {
-  "name": "abeaconsearch",
+  "name": "sourced",
   "version": "1.0.0",
-  "description": "Beacon Search — a self-hostable, fully open-source full-text search engine with a web UI. No external services required.",
+  "description": "Sourced — self-hostable open-source search and public-source discovery.",
   "type": "module",
   "license": "MIT",
-  "author": "abeaconsearch contributors",
+  "author": "Sourced contributors",
   "homepage": "https://github.com/pocketsearch/pocketSearch#readme",
   "repository": {
     "type": "git",
@@ -23,6 +23,8 @@
     "open-source"
   ],
   "bin": {
+    "sourced": "dist/cli/index.js",
+    "sourced-mcp": "dist/mcp/index.js",
     "beacon": "dist/cli/index.js",
     "beacon-mcp": "dist/mcp/index.js"
   },
