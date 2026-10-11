@@ -135,7 +135,7 @@ export class SearxngProvider implements WebSearchProvider {
 
 /**
  * Build the configured web search provider, or `null` when
- * `BEACON_ANSWER_WEB_SEARCH` is unset or its credentials are missing.
+ * `SOURCED_ANSWER_WEB_SEARCH` is unset or its credentials are missing.
  */
 export function createWebSearchProvider(
   config: AnswerConfig,

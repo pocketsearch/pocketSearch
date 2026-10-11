@@ -46,8 +46,8 @@ describe('makeSnippet', () => {
   const body = 'The quick brown fox jumps over the lazy dog. '.repeat(20);
 
   it('centers on the first matching term', () => {
-    const snippet = makeSnippet(body + 'BEACON marker here.', ['beacon'], 20);
-    expect(snippet.toLowerCase()).toContain('beacon');
+    const snippet = makeSnippet(body + 'SOURCED marker here.', ['sourced'], 20);
+    expect(snippet.toLowerCase()).toContain('sourced');
     expect(snippet.startsWith('… ')).toBe(true);
   });
 

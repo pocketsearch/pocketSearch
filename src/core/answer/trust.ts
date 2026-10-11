@@ -69,7 +69,7 @@ function hostMatches(host: string, suffix: string): boolean {
 
 /**
  * Classify how trustworthy a source is from its URL. `extraOfficial` is an
- * operator-provided allowlist (`BEACON_ANSWER_TRUSTED_DOMAINS`) promoted to
+ * operator-provided allowlist (`SOURCED_ANSWER_TRUSTED_DOMAINS`) promoted to
  * `official`. A source with no resolvable URL is always `unverified`.
  */
 export function classifyTrust(

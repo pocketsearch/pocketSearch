@@ -1,5 +1,5 @@
 /**
- * Thin HTTP client for a running Beacon Search server. Used by the MCP server so
+ * Thin HTTP client for a running Sourced server. Used by the MCP server so
  * that its `search`/`index` tools operate through the same API (and index file)
  * as everything else, avoiding concurrent-writer races on the snapshot.
  */
@@ -25,9 +25,9 @@ export class BeaconClient {
       });
     } catch (error) {
       throw new Error(
-        `Cannot reach the Beacon API at ${this.baseUrl} (${
+        `Cannot reach the Sourced API at ${this.baseUrl} (${
           error instanceof Error ? error.message : String(error)
-        }). Start it with \`beacon serve\` or set BEACON_API_URL.`,
+        }). Start it with \`sourced serve\` or set SOURCED_API_URL.`,
       );
     }
     const text = await response.text();
@@ -36,7 +36,7 @@ export class BeaconClient {
       const message =
         payload && typeof payload === 'object' && 'message' in payload
           ? String((payload as { message: unknown }).message)
-          : `Beacon API returned HTTP ${response.status}`;
+          : `Sourced API returned HTTP ${response.status}`;
       throw new Error(message);
     }
     return payload as T;

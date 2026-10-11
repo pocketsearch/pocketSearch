@@ -33,8 +33,8 @@ async function openEngine(): Promise<{ engine: PersistentEngine; indexFile: stri
 
 const program = new Command();
 program
-  .name('beacon')
-  .description('Beacon Search — self-hostable full-text search engine')
+  .name('sourced')
+  .description('Sourced — self-hostable full-text search engine')
   .version(pkg.version);
 
 program

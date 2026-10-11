@@ -21,11 +21,11 @@ export interface BuildAppOptions {
 }
 
 const PLACEHOLDER_PAGE = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Beacon Search</title>
+<html lang="en"><head><meta charset="utf-8"><title>Sourced</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>body{font:16px/1.6 system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1.5rem;color:#1a1a2e}code{background:#eee;padding:.15em .4em;border-radius:4px}</style>
 </head><body>
-<h1>🔦 Beacon Search API is running</h1>
+<h1>Sourced API is running</h1>
 <p>The web UI has not been built yet. Run <code>npm run build:web</code> (or the full
 <code>npm run build</code>) and restart, or use the JSON API directly:</p>
 <ul>

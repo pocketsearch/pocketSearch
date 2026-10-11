@@ -71,7 +71,7 @@ export class ReconRunner {
     if (!this.opts.allowPrivateHosts && (await hostIsPrivate(target.host))) {
       throw new Error(
         `recon target "${target.host}" resolves to a private or reserved address ` +
-          '(set BEACON_RECON_ALLOW_PRIVATE=1 to allow)',
+          '(set SOURCED_RECON_ALLOW_PRIVATE=1 to allow)',
       );
     }
 

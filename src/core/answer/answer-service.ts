@@ -200,7 +200,7 @@ export class AnswerService {
     if (retrieved.length === 0) {
       return finish({
         answer:
-          'No reliable source was found for this query. Try rephrasing it, or add material through the Crawl or Add tabs so Beacon has something to answer from.',
+          'No reliable source was found for this query. Try rephrasing it, or add material through the Crawl or Add tabs so Sourced has something to answer from.',
         claims: [],
         confidence: 'none',
         confidenceReason: 'no sources could be retrieved from the index or the web',

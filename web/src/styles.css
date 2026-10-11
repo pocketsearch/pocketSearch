@@ -1,5 +1,5 @@
 /* ============================================================
-   ABEACON — monospace terminal UI
+   SOURCED — monospace terminal UI
    ============================================================ */
 
 :root {
@@ -120,12 +120,12 @@ h3 {
   text-transform: uppercase;
 }
 
-.beacon {
+.sourced-mark {
   fill: currentColor;
   display: block;
 }
 
-.brand .beacon {
+.brand .sourced-mark {
   opacity: 0.9;
 }
 
@@ -674,7 +674,7 @@ button {
   color: var(--muted);
 }
 
-.empty .beacon {
+.empty .sourced-mark {
   width: 8.5rem;
   height: auto;
   color: var(--fg);

@@ -1,6 +1,6 @@
 # Passive recon
 
-Beacon Search can profile a domain, IP address, or URL from information the host
+Sourced can profile a domain, IP address, or URL from information the host
 publishes to anyone. It is **passive**: DNS lookups, one TLS handshake, RDAP /
 `whois`, `crt.sh` certificate-transparency logs, and ordinary GET requests for
 `robots.txt` / the page. No port scanning, no authentication, no vulnerability
@@ -21,7 +21,7 @@ probing.
 Every check runs in parallel with its own timeout and full error isolation — a
 failing check is recorded in `errors[]` and the rest of the report is still
 returned. Targets that resolve to a private / loopback / reserved address are
-refused unless `BEACON_RECON_ALLOW_PRIVATE=1` (the CLI always allows them, since a
+refused unless `SOURCED_RECON_ALLOW_PRIVATE=1` (the CLI always allows them, since a
 local operator runs it).
 
 ## Use it
@@ -37,9 +37,9 @@ GET /api/recon?target=https://site.tld&index=1      # also store the report
 **CLI**
 
 ```bash
-beacon recon example.com
-beacon recon 1.1.1.1 --json
-beacon recon example.com --no-subdomains --index
+sourced recon example.com
+sourced recon 1.1.1.1 --json
+sourced recon example.com --no-subdomains --index
 ```
 
 **Web UI** — the *Recon* tab.
@@ -50,9 +50,9 @@ beacon recon example.com --no-subdomains --index
 
 | Variable                           | Default | Purpose                                              |
 | ---------------------------------- | ------- | --------------------------------------------------- |
-| `BEACON_RECON_ENABLED`             | `true`  | Master switch for the toolset and `/api/recon`      |
-| `BEACON_RECON_TIMEOUT_MS`          | `8000`  | Per-check base timeout (slow sources get a buffer)  |
-| `BEACON_RECON_ALLOW_PRIVATE`       | `false` | Allow targets on private / loopback addresses       |
-| `BEACON_RECON_WHOIS`               | `true`  | Permit the system `whois` binary as an RDAP fallback |
-| `BEACON_RECON_MAX_GEO_IPS`         | `3`     | How many resolved IPs to geolocate for a domain     |
-| `BEACON_RECON_INDEX_RESULTS`       | `false` | Index every completed report as a document          |
+| `SOURCED_RECON_ENABLED`             | `true`  | Master switch for the toolset and `/api/recon`      |
+| `SOURCED_RECON_TIMEOUT_MS`          | `8000`  | Per-check base timeout (slow sources get a buffer)  |
+| `SOURCED_RECON_ALLOW_PRIVATE`       | `false` | Allow targets on private / loopback addresses       |
+| `SOURCED_RECON_WHOIS`               | `true`  | Permit the system `whois` binary as an RDAP fallback |
+| `SOURCED_RECON_MAX_GEO_IPS`         | `3`     | How many resolved IPs to geolocate for a domain     |
+| `SOURCED_RECON_INDEX_RESULTS`       | `false` | Index every completed report as a document          |

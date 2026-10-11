@@ -3,7 +3,7 @@ import { RobotsRules } from './robots.js';
 
 describe('RobotsRules', () => {
   it('allows everything when the file is empty', () => {
-    const rules = new RobotsRules('', 'BeaconSearchBot');
+    const rules = new RobotsRules('', 'SourcedBot');
     expect(rules.isAllowed('/anything')).toBe(true);
   });
 
@@ -19,10 +19,10 @@ describe('RobotsRules', () => {
       'User-agent: *',
       'Disallow: /',
       '',
-      'User-agent: BeaconSearchBot',
+      'User-agent: SourcedBot',
       'Disallow: /admin',
     ].join('\n');
-    const rules = new RobotsRules(body, 'BeaconSearchBot/1.0');
+    const rules = new RobotsRules(body, 'SourcedBot/1.0');
     expect(rules.isAllowed('/admin')).toBe(false);
     expect(rules.isAllowed('/docs')).toBe(true);
   });

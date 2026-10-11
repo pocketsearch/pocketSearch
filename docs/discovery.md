@@ -23,7 +23,7 @@ longer "insufficient" (`< 5 useful results`, single-source, or no strong match �
 | 2 — expansion | the same fast providers on generated variants (`expand.ts`): unquoted, punctuation-stripped, unicode-folded, singular/plural, acronym, reordered, date-free, quoted-phrase, plus entity-derived (root domain, hostname, path terms, email local-part, …) |
 | 3 — discovery | Wayback CDX, Common Crawl URL index, certificate transparency (crt.sh), and the vulnerability databases (OSV.dev, GitHub Advisories, NVD, CISA KEV) for CVE / security-flavoured queries |
 | 4 — entity pivot | classification-driven queries — root domain / subdomains for a domain, path terms for a URL, handle-as-words for a username, local-part for an email |
-| 5 — persist | fetch the top few new public pages through the robots + SSRF-guard stack and add them to the local index (best-effort, `BEACON_DISCOVERY_CRAWL`) |
+| 5 — persist | fetch the top few new public pages through the robots + SSRF-guard stack and add them to the local index (best-effort, `SOURCED_DISCOVERY_CRAWL`) |
 | 6 — related & suggestions | weak exacts are demoted to *related*; real query-derived search shortcuts are always appended as the floor (`suggestions.ts`) |
 
 ## Providers (`src/core/discovery/providers/`)
@@ -103,6 +103,6 @@ richer set without losing scroll position.
 
 ## Config
 
-`BEACON_DISCOVERY_ENABLED`, `BEACON_DISCOVERY_BUDGET_MS`,
-`BEACON_DISCOVERY_DEEP_BUDGET_MS`, `BEACON_DISCOVERY_CRAWL` — see
+`SOURCED_DISCOVERY_ENABLED`, `SOURCED_DISCOVERY_BUDGET_MS`,
+`SOURCED_DISCOVERY_DEEP_BUDGET_MS`, `SOURCED_DISCOVERY_CRAWL` — see
 [`.env.example`](../.env.example).

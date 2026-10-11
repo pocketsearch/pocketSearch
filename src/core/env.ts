@@ -8,8 +8,8 @@ import process from 'node:process';
  * Existing `process.env` values are not overwritten.
  */
 export function loadDotEnv(cwd: string = process.cwd()): void {
-  const file = process.env.BEACON_ENV_FILE
-    ? path.resolve(cwd, process.env.BEACON_ENV_FILE)
+  const file = process.env.SOURCED_ENV_FILE
+    ? path.resolve(cwd, process.env.SOURCED_ENV_FILE)
     : path.resolve(cwd, '.env');
   if (!existsSync(file)) return;
   try {

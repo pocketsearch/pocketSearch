@@ -60,7 +60,7 @@ export class OpenAlexProvider implements SearchProvider {
       timeoutMs: this.timeoutMs,
       signal: ctx.signal,
       fetchImpl: this.opts.fetchImpl,
-      headers: { 'user-agent': 'BeaconSearchBot/1.0 (discovery; mailto:beacon@example.invalid)' },
+      headers: { 'user-agent': 'SourcedBot/1.0 (discovery; mailto:sourced@example.invalid)' },
     });
 
     const rows: OpenAlexWork[] =

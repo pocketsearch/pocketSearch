@@ -118,7 +118,7 @@ export class OpenAiCompatibleSynthesizer implements LlmSynthesizer {
 
   async weave(input: SynthesisInput, signal?: AbortSignal): Promise<string> {
     if (!this.apiKey || !this.model) {
-      throw new Error('OPENAI_API_KEY / BEACON_ANSWER_OPENAI_MODEL are not configured');
+      throw new Error('OPENAI_API_KEY / SOURCED_ANSWER_OPENAI_MODEL are not configured');
     }
     const response = await fetchWithTimeout(`${this.baseUrl}/chat/completions`, {
       method: 'POST',

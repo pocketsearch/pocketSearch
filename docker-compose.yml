@@ -1,15 +1,15 @@
 services:
-  beacon:
+  sourced:
     build: .
-    image: abeaconsearch:latest
+    image: sourced:latest
     ports:
       - '127.0.0.1:7700:7700'
     environment:
-      BEACON_LOG_LEVEL: info
-      BEACON_CRAWL_MAX_PAGES: '100'
+      SOURCED_LOG_LEVEL: info
+      SOURCED_CRAWL_MAX_PAGES: '100'
     volumes:
-      - beacon-data:/data
+      - sourced-data:/data
     restart: unless-stopped
 
 volumes:
-  beacon-data:
+  sourced-data:

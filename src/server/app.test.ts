@@ -218,7 +218,7 @@ describe('HTTP API', () => {
     const res = await app.inject({ method: 'GET', url: '/' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
-    expect(res.body).toContain('Beacon Search API is running');
+    expect(res.body).toContain('Sourced API is running');
   });
 
   it('honours ?fuzzy=false in the query string (not a truthy string)', async () => {

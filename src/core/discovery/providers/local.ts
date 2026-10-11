@@ -10,7 +10,7 @@ export interface LocalEngineLike {
 }
 
 /**
- * The local Abeacon index. Runs an AND pass first (precise), then, if that is
+ * The local Sourced index. Runs an AND pass first (precise), then, if that is
  * thin, an OR pass (recall) — so a multi-word query where no single document
  * contains every term still returns its best partial matches.
  */

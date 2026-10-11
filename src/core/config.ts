@@ -114,12 +114,12 @@ function readString(name: string, fallback: string): string {
 }
 
 /**
- * Read an optional string, accepting both the `BEACON_`-prefixed name and the
+ * Read an optional string, accepting both the `SOURCED_`-prefixed name and the
  * bare name (the plate provider vars are commonly set with their DVLA/DVSA
  * spelling, e.g. `DVLA_VES_API_KEY`).
  */
 function readOptional(name: string): string | undefined {
-  const raw = process.env[`BEACON_${name}`] ?? process.env[name];
+  const raw = process.env[`SOURCED_${name}`] ?? process.env[name];
   return raw === undefined || raw.trim() === '' ? undefined : raw.trim();
 }
 
@@ -155,29 +155,29 @@ function readList(name: string): string[] {
  */
 export function loadConfig(overrides: ConfigOverrides = {}): Config {
   const cwd = process.cwd();
-  const dataDir = path.resolve(cwd, readString('BEACON_DATA_DIR', 'data'));
+  const dataDir = path.resolve(cwd, readString('SOURCED_DATA_DIR', 'data'));
   const nodeEnv = process.env.NODE_ENV ?? 'development';
 
   const base: Config = {
-    host: readString('BEACON_HOST', '0.0.0.0'),
-    port: readInt('BEACON_PORT', readInt('PORT', 7700)),
+    host: readString('SOURCED_HOST', '0.0.0.0'),
+    port: readInt('SOURCED_PORT', readInt('PORT', 7700)),
     dataDir,
-    indexFile: path.resolve(cwd, readString('BEACON_INDEX_FILE', path.join(dataDir, 'index.json'))),
-    webDir: path.resolve(cwd, readString('BEACON_WEB_DIR', 'web/dist')),
-    logLevel: readString('BEACON_LOG_LEVEL', nodeEnv === 'test' ? 'silent' : 'info'),
-    logPretty: readBool('BEACON_LOG_PRETTY', nodeEnv === 'development'),
-    corsOrigin: readString('BEACON_CORS_ORIGIN', '') || true,
-    persistDebounceMs: readInt('BEACON_PERSIST_DEBOUNCE_MS', 750),
+    indexFile: path.resolve(cwd, readString('SOURCED_INDEX_FILE', path.join(dataDir, 'index.json'))),
+    webDir: path.resolve(cwd, readString('SOURCED_WEB_DIR', 'web/dist')),
+    logLevel: readString('SOURCED_LOG_LEVEL', nodeEnv === 'test' ? 'silent' : 'info'),
+    logPretty: readBool('SOURCED_LOG_PRETTY', nodeEnv === 'development'),
+    corsOrigin: readString('SOURCED_CORS_ORIGIN', '') || true,
+    persistDebounceMs: readInt('SOURCED_PERSIST_DEBOUNCE_MS', 750),
     crawlUserAgent: readString(
-      'BEACON_CRAWL_USER_AGENT',
-      'BeaconSearchBot/1.0 (+https://github.com/pocketsearch/pocketSearch)',
+      'SOURCED_CRAWL_USER_AGENT',
+      'SourcedBot/1.0 (+https://github.com/pocketsearch/pocketSearch)',
     ),
-    crawlMaxPages: readInt('BEACON_CRAWL_MAX_PAGES', 50),
-    crawlConcurrency: readInt('BEACON_CRAWL_CONCURRENCY', 4),
-    crawlTimeoutMs: readInt('BEACON_CRAWL_TIMEOUT_MS', 15_000),
-    crawlDelayMs: readInt('BEACON_CRAWL_DELAY_MS', 150),
-    crawlAllowPrivateHosts: readBool('BEACON_CRAWL_ALLOW_PRIVATE', false),
-    maxBodyBytes: readInt('BEACON_MAX_BODY_BYTES', 8 * 1024 * 1024),
+    crawlMaxPages: readInt('SOURCED_CRAWL_MAX_PAGES', 50),
+    crawlConcurrency: readInt('SOURCED_CRAWL_CONCURRENCY', 4),
+    crawlTimeoutMs: readInt('SOURCED_CRAWL_TIMEOUT_MS', 15_000),
+    crawlDelayMs: readInt('SOURCED_CRAWL_DELAY_MS', 150),
+    crawlAllowPrivateHosts: readBool('SOURCED_CRAWL_ALLOW_PRIVATE', false),
+    maxBodyBytes: readInt('SOURCED_MAX_BODY_BYTES', 8 * 1024 * 1024),
     plate: {
       dvlaVesApiKey: readOptional('DVLA_VES_API_KEY'),
       dvlaVesBaseUrl: readOptional('DVLA_VES_BASE_URL'),
@@ -187,14 +187,14 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
       motTokenUrl: readOptional('MOT_TOKEN_URL'),
       motScope: readOptional('MOT_SCOPE'),
       motBaseUrl: readOptional('MOT_BASE_URL'),
-      timeoutMs: readInt('BEACON_PLATE_TIMEOUT_MS', 12_000),
-      indexResults: readBool('BEACON_PLATE_INDEX_RESULTS', false),
+      timeoutMs: readInt('SOURCED_PLATE_TIMEOUT_MS', 12_000),
+      indexResults: readBool('SOURCED_PLATE_INDEX_RESULTS', false),
     },
     answer: {
-      enabled: readBool('BEACON_ANSWER_ENABLED', true),
-      autoAnswer: readBool('BEACON_ANSWER_AUTO', true),
+      enabled: readBool('SOURCED_ANSWER_ENABLED', true),
+      autoAnswer: readBool('SOURCED_ANSWER_AUTO', true),
       anthropicApiKey: readOptional('ANTHROPIC_API_KEY'),
-      anthropicModel: readString('BEACON_ANSWER_ANTHROPIC_MODEL', 'claude-opus-5'),
+      anthropicModel: readString('SOURCED_ANSWER_ANTHROPIC_MODEL', 'claude-opus-5'),
       openaiApiKey: readOptional('OPENAI_API_KEY'),
       openaiBaseUrl:
         readOptional('OPENAI_BASE_URL') ??
@@ -205,25 +205,25 @@ export function loadConfig(overrides: ConfigOverrides = {}): Config {
       braveApiKey: readOptional('BRAVE_SEARCH_API_KEY'),
       tavilyApiKey: readOptional('TAVILY_API_KEY'),
       searxngUrl: readOptional('SEARXNG_URL'),
-      maxSources: readInt('BEACON_ANSWER_MAX_SOURCES', 8),
-      fetchTimeoutMs: readInt('BEACON_ANSWER_FETCH_TIMEOUT_MS', 8_000),
-      llmTimeoutMs: readInt('BEACON_ANSWER_LLM_TIMEOUT_MS', 30_000),
+      maxSources: readInt('SOURCED_ANSWER_MAX_SOURCES', 8),
+      fetchTimeoutMs: readInt('SOURCED_ANSWER_FETCH_TIMEOUT_MS', 8_000),
+      llmTimeoutMs: readInt('SOURCED_ANSWER_LLM_TIMEOUT_MS', 30_000),
       trustedDomains: readList('ANSWER_TRUSTED_DOMAINS'),
-      allowPrivateHosts: readBool('BEACON_ANSWER_ALLOW_PRIVATE', false),
+      allowPrivateHosts: readBool('SOURCED_ANSWER_ALLOW_PRIVATE', false),
     },
     discovery: {
-      enabled: readBool('BEACON_DISCOVERY_ENABLED', true),
-      normalBudgetMs: readInt('BEACON_DISCOVERY_BUDGET_MS', 5_000),
-      deepBudgetMs: readInt('BEACON_DISCOVERY_DEEP_BUDGET_MS', 15_000),
-      crawlAndIndex: readBool('BEACON_DISCOVERY_CRAWL', true),
+      enabled: readBool('SOURCED_DISCOVERY_ENABLED', true),
+      normalBudgetMs: readInt('SOURCED_DISCOVERY_BUDGET_MS', 5_000),
+      deepBudgetMs: readInt('SOURCED_DISCOVERY_DEEP_BUDGET_MS', 15_000),
+      crawlAndIndex: readBool('SOURCED_DISCOVERY_CRAWL', true),
     },
     recon: {
-      enabled: readBool('BEACON_RECON_ENABLED', true),
-      timeoutMs: readInt('BEACON_RECON_TIMEOUT_MS', 8_000),
-      allowPrivateHosts: readBool('BEACON_RECON_ALLOW_PRIVATE', false),
-      whois: readBool('BEACON_RECON_WHOIS', true),
-      maxGeoIps: readInt('BEACON_RECON_MAX_GEO_IPS', 3),
-      indexResults: readBool('BEACON_RECON_INDEX_RESULTS', false),
+      enabled: readBool('SOURCED_RECON_ENABLED', true),
+      timeoutMs: readInt('SOURCED_RECON_TIMEOUT_MS', 8_000),
+      allowPrivateHosts: readBool('SOURCED_RECON_ALLOW_PRIVATE', false),
+      whois: readBool('SOURCED_RECON_WHOIS', true),
+      maxGeoIps: readInt('SOURCED_RECON_MAX_GEO_IPS', 3),
+      indexResults: readBool('SOURCED_RECON_INDEX_RESULTS', false),
     },
   };
 
