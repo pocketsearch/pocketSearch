@@ -8,6 +8,15 @@ describe('addressIsPrivate', () => {
     }
   });
 
+  it('flags only addresses inside the private IPv4 range boundaries', () => {
+    for (const ip of ['172.16.0.0', '172.31.255.255', '100.64.0.0', '100.127.255.255']) {
+      expect(addressIsPrivate(ip)).toBe(true);
+    }
+    for (const ip of ['172.15.255.255', '172.32.0.0', '100.63.255.255', '100.128.0.0']) {
+      expect(addressIsPrivate(ip)).toBe(false);
+    }
+  });
+
   it('allows public IPv4', () => {
     for (const ip of ['8.8.8.8', '1.1.1.1', '93.184.216.34']) {
       expect(addressIsPrivate(ip)).toBe(false);
