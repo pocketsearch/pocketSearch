@@ -1,4 +1,4 @@
-# Contributing to Beacon Search
+# Contributing to Sourced
 
 Thanks for taking the time to contribute! This project aims to stay small,
 dependency-light and easy to run anywhere.
@@ -37,7 +37,7 @@ npm run build
 ## Reporting bugs
 
 Open an issue with reproduction steps, the version, and the relevant log output
-(`BEACON_LOG_LEVEL=debug`).
+(`SOURCED_LOG_LEVEL=debug`).
 
 By contributing you agree that your contributions are licensed under the MIT
 License.

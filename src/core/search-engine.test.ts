@@ -19,8 +19,8 @@ function q(overrides: Partial<SearchQuery> = {}): SearchQuery {
 function seed(engine: SearchEngine): void {
   engine.upsert({
     id: 'a',
-    title: 'Getting started with Beacon',
-    body: 'Beacon Search is a self-hostable full-text search engine.',
+    title: 'Getting started with Sourced',
+    body: 'Sourced is a self-hostable full-text search engine.',
     tags: ['docs', 'intro'],
     source: 'handbook',
   });
@@ -103,7 +103,7 @@ describe('SearchEngine', () => {
   it('highlights matched terms in title and snippet', () => {
     const engine = new SearchEngine();
     seed(engine);
-    const res = engine.search(q({ q: 'beacon' }));
+    const res = engine.search(q({ q: 'sourced' }));
     expect(res.hits[0]?.title).toContain('<mark>');
     expect(res.hits[0]?.snippet).toContain('<mark>');
   });
@@ -113,7 +113,7 @@ describe('SearchEngine', () => {
     seed(engine);
     expect(engine.remove('a')).toBe(true);
     expect(engine.remove('a')).toBe(false);
-    expect(engine.search(q({ q: 'beacon' })).total).toBe(0);
+    expect(engine.search(q({ q: 'sourced' })).total).toBe(0);
   });
 
   it('round-trips through a snapshot', () => {

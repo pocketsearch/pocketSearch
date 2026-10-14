@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "beacon-search": {
+    "sourced": {
       "command": "node",
       "args": ["dist/mcp/index.js"],
       "env": {
-        "BEACON_API_URL": "http://127.0.0.1:7700"
+        "SOURCED_API_URL": "http://127.0.0.1:7700"
       }
     }
   }

@@ -76,7 +76,7 @@ export async function crawl(options: CrawlOptions, deps: CrawlDeps = {}): Promis
         {
           url: start.toString(),
           error:
-            'refusing to crawl a private or loopback host; set BEACON_CRAWL_ALLOW_PRIVATE=true to override',
+            'refusing to crawl a private or loopback host; set SOURCED_CRAWL_ALLOW_PRIVATE=true to override',
         },
       ],
       skipped: [],

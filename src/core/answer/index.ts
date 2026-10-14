@@ -14,7 +14,7 @@ export interface CreateAnswerServiceOptions {
 
 /**
  * Build the answer service from runtime config, or return `null` when answer
- * synthesis is disabled (`BEACON_ANSWER_ENABLED=false`). With no LLM or
+ * synthesis is disabled (`SOURCED_ANSWER_ENABLED=false`). With no LLM or
  * web-search credentials configured it still works — answers are then a
  * deterministic weave of local-index extracts.
  */

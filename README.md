@@ -1,4 +1,4 @@
-# 🔦 Beacon Search
+# Sourced
 
 A small, **fully open-source, self-hostable full-text search engine** with a web UI.
 No database, no external services — the index lives in memory and is persisted to a
@@ -9,11 +9,11 @@ single JSON file. Runs anywhere Node.js 20+ runs, or as a Docker container.
 - **Answer weave** — question-like queries also get a short written answer built _only_ from retrieved sources (index pages + optional live web search), with per-sentence citations, domain trust tiers, retrieval timestamps, a confidence banner, and cross-source consensus / contradiction / bias analysis. Self-contained sums, percentages and unit conversions are answered directly by an inline calculator. Works offline as a deterministic weave; upgrades to prose with an LLM key.
 - **UK number plate checker** with automatic backend checks — format, age identifier, DVLA region, and (with free API keys) DVLA tax/MOT status and DVSA MOT history.
 - **Passive recon** — profile a domain / IP / URL from public data only: DNS (+ SPF/DMARC), RDAP/`whois`, the served TLS certificate, HTTP security-header grade + technology fingerprint, `robots.txt` / `sitemap.xml`, `crt.sh` subdomains, and IP geolocation. No port scanning or probing. See [docs/recon.md](docs/recon.md).
-- **MCP server** (`beacon-mcp`, built on [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)) exposing the plate checker, the recon toolset and the index as tools for Claude & other MCP clients.
+- **MCP server** (`sourced-mcp`, built on [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk)) exposing the plate checker, the recon toolset and the index as tools for Claude & other MCP clients.
 - **REST API** built on [Fastify](https://fastify.dev/) with schema validation.
 - **Web UI** (React + Vite) for searching, plate checks, adding documents and crawling sites.
 - **Built-in crawler** that indexes a website's pages and respects `robots.txt`.
-- **CLI** (`beacon`) for scripting: add, import, crawl, search, stats, plate, recon.
+- **CLI** (`sourced`) for scripting: add, import, crawl, search, stats, plate, recon.
 - **Zero-config**: every setting has a sane default. Point it at content and go.
 
 ---
@@ -35,14 +35,14 @@ npm start
 
 ```bash
 docker compose up --build
-# → http://localhost:7700   (index persisted in the `beacon-data` volume)
+# → http://localhost:7700   (index persisted in the `sourced-data` volume)
 ```
 
 or plain Docker:
 
 ```bash
-docker build -t abeaconsearch .
-docker run -p 7700:7700 -v beacon-data:/data abeaconsearch
+docker build -t sourced .
+docker run -p 7700:7700 -v sourced-data:/data sourced
 ```
 
 ### Development (API + UI with hot reload)
@@ -78,7 +78,7 @@ curl -X POST http://localhost:7700/api/documents \
 ```
 
 After building and installing globally (`npm link` or `npm i -g .`) the CLI is
-available as `beacon`.
+available as `sourced`.
 
 ---
 
@@ -146,12 +146,12 @@ With no credentials the offline checks still run. Configure keys in `.env` — s
 [`.env.example`](.env.example).
 
 ```bash
-beacon plate "AB12 CDE"                     # human-readable report
-beacon plate "AB12 CDE" --json --index      # JSON, and store the report in the index
+sourced plate "AB12 CDE"                     # human-readable report
+sourced plate "AB12 CDE" --json --index      # JSON, and store the report in the index
 curl 'http://localhost:7700/api/plate/AB12CDE?vehicle=false&mot=false'
 ```
 
-Set `BEACON_PLATE_INDEX_RESULTS=true` (or pass `index=true`) to save every check
+Set `SOURCED_PLATE_INDEX_RESULTS=true` (or pass `index=true`) to save every check
 into the search index as a `plate-check` document — so past checks are searchable.
 
 ---
@@ -165,14 +165,14 @@ subdomains, and IP geolocation. **Passive only**: DNS lookups, one TLS handshake
 and ordinary GET requests — no port scanning, no probing. No API keys.
 
 ```bash
-beacon recon example.com                    # human-readable report
-beacon recon 8.8.8.8 --json                 # JSON
-beacon recon example.com --no-subdomains --index
+sourced recon example.com                    # human-readable report
+sourced recon 8.8.8.8 --json                 # JSON
+sourced recon example.com --no-subdomains --index
 curl 'http://localhost:7700/api/recon?target=example.com'
 ```
 
 Targets on private / loopback addresses are refused over HTTP unless
-`BEACON_RECON_ALLOW_PRIVATE=1` (the CLI always allows them). Full reference:
+`SOURCED_RECON_ALLOW_PRIVATE=1` (the CLI always allows them). Full reference:
 [docs/recon.md](docs/recon.md).
 
 ---
@@ -184,7 +184,7 @@ queries) returns a short written answer assembled **only** from retrieved
 sources:
 
 1. **Retrieve** — matching pages from the local index, plus — when
-   `BEACON_ANSWER_WEB_SEARCH` names a provider — live web results fetched at
+   `SOURCED_ANSWER_WEB_SEARCH` names a provider — live web results fetched at
    query time through the same `robots.txt` / SSRF-guard / timeout stack the
    crawler uses.
 2. **Ground** — the sentences that best answer the query are extracted and tied
@@ -205,18 +205,18 @@ tiers and confidence rubric, and [`.env.example`](.env.example) for the knobs.
 
 ## MCP server
 
-`beacon-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
+`sourced-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
 (stdio) exposing the plate checker and the search index as tools. Full details in
 [docs/mcp.md](docs/mcp.md).
 
 ```bash
 npm run build
-claude mcp add beacon-search -- node dist/mcp/index.js   # Claude Code
+claude mcp add sourced -- node dist/mcp/index.js   # Claude Code
 ```
 
 Tools: `check_number_plate`, `validate_plate_format`, `decode_plate`,
-`dvla_vehicle_enquiry`, `mot_history`, `beacon_search`, `beacon_index_document`,
-`beacon_stats`. A project-scoped [`.mcp.json`](.mcp.json) is included.
+`dvla_vehicle_enquiry`, `mot_history`, `sourced_search`, `sourced_index_document`,
+`sourced_stats`. A project-scoped [`.mcp.json`](.mcp.json) is included.
 
 ---
 
@@ -227,14 +227,14 @@ See [`.env.example`](.env.example) for the full list. Common ones:
 
 | Variable                 | Default             | Description                      |
 | ------------------------ | ------------------- | -------------------------------- |
-| `BEACON_PORT`            | `7700`              | HTTP port (`PORT` also honoured) |
-| `BEACON_HOST`            | `0.0.0.0`           | Bind address                     |
-| `BEACON_DATA_DIR`        | `data`              | Where the index file is stored   |
-| `BEACON_INDEX_FILE`      | `<data>/index.json` | Explicit index path              |
-| `BEACON_WEB_DIR`         | `web/dist`          | Built web UI directory           |
-| `BEACON_CORS_ORIGIN`     | _(all)_             | Comma-separated allowed origins  |
-| `BEACON_LOG_LEVEL`       | `info`              | `trace`…`error`, or `silent`     |
-| `BEACON_CRAWL_MAX_PAGES` | `50`                | Default crawl page budget        |
+| `SOURCED_PORT`            | `7700`              | HTTP port (`PORT` also honoured) |
+| `SOURCED_HOST`            | `0.0.0.0`           | Bind address                     |
+| `SOURCED_DATA_DIR`        | `data`              | Where the index file is stored   |
+| `SOURCED_INDEX_FILE`      | `<data>/index.json` | Explicit index path              |
+| `SOURCED_WEB_DIR`         | `web/dist`          | Built web UI directory           |
+| `SOURCED_CORS_ORIGIN`     | _(all)_             | Comma-separated allowed origins  |
+| `SOURCED_LOG_LEVEL`       | `info`              | `trace`…`error`, or `silent`     |
+| `SOURCED_CRAWL_MAX_PAGES` | `50`                | Default crawl page budget        |
 
 ---
 
@@ -263,8 +263,8 @@ rebuilt, which keeps the on-disk format stable across dependency upgrades.
 src/core/        search engine, persistence, crawler, robots, config  (no HTTP)
 src/core/plate/  number plate format/age/region logic + DVLA/DVSA providers
 src/server/      Fastify app, routes, entrypoint
-src/cli/         `beacon` command
-src/mcp/         `beacon-mcp` Model Context Protocol server
+src/cli/         `sourced` command
+src/mcp/         `sourced-mcp` Model Context Protocol server
 web/             React + Vite single-page UI
 ```
 

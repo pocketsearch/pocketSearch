@@ -38,21 +38,21 @@ jobs:
           curl -sf 'http://127.0.0.1:7700/api/search?q=hello' | grep -q '"total":1'
           kill $SERVER_PID
         env:
-          BEACON_DATA_DIR: ${{ runner.temp }}/beacon-data
-          BEACON_LOG_LEVEL: warn
+          SOURCED_DATA_DIR: ${{ runner.temp }}/sourced-data
+          SOURCED_LOG_LEVEL: warn
 
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t abeaconsearch:ci .
+        run: docker build -t sourced:ci .
       - name: Run container smoke test
         run: |
-          docker run -d --name beacon -p 7700:7700 abeaconsearch:ci
+          docker run -d --name sourced -p 7700:7700 sourced:ci
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:7700/api/health && break
             sleep 1
           done
           curl -sf http://127.0.0.1:7700/api/health
-          docker rm -f beacon
+          docker rm -f sourced

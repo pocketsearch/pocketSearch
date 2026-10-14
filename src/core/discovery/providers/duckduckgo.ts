@@ -52,7 +52,7 @@ export class DuckDuckGoProvider implements SearchProvider {
     const terms = tokenize(query);
     const url =
       `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}` +
-      '&format=json&no_html=1&no_redirect=1&skip_disambig=0&t=beacon-search';
+      '&format=json&no_html=1&no_redirect=1&skip_disambig=0&t=sourced';
     const body = await fetchJson<DdgInstantAnswer>(url, {
       timeoutMs: this.timeoutMs,
       signal: ctx.signal,

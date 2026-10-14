@@ -27,7 +27,7 @@ export const optionalBooleanParam = z
     return !FALSEY.has(v.trim().toLowerCase());
   });
 
-/** A document stored in the Beacon Search index. */
+/** A document stored in the Sourced index. */
 export interface BeaconDocument {
   id: string;
   title: string;

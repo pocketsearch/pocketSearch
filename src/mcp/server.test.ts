@@ -14,7 +14,7 @@ function textOf(result: unknown): string {
   return (result as ToolResult).content.map((c) => c.text ?? '').join('\n');
 }
 
-describe('Beacon MCP server', () => {
+describe('Sourced MCP server', () => {
   let client: Client;
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -50,14 +50,14 @@ describe('Beacon MCP server', () => {
     await client.close();
   });
 
-  it('exposes the plate, recon and beacon tools', async () => {
+  it('exposes the plate, recon and Sourced tools', async () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual(
       [
-        'beacon_index_document',
-        'beacon_search',
-        'beacon_stats',
+        'sourced_index_document',
+        'sourced_search',
+        'sourced_stats',
         'check_number_plate',
         'decode_plate',
         'dvla_vehicle_enquiry',
@@ -100,9 +100,9 @@ describe('Beacon MCP server', () => {
     expect(textOf(result)).toContain('DVLA_VES_API_KEY');
   });
 
-  it('proxies beacon_search to the HTTP API', async () => {
+  it('proxies sourced_search to the HTTP API', async () => {
     const result = await client.callTool({
-      name: 'beacon_search',
+      name: 'sourced_search',
       arguments: { query: 'hello', limit: 5 },
     });
     const data = JSON.parse(textOf(result));
@@ -111,8 +111,8 @@ describe('Beacon MCP server', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/search?q=hello');
   });
 
-  it('proxies beacon_stats to the HTTP API', async () => {
-    const result = await client.callTool({ name: 'beacon_stats', arguments: {} });
+  it('proxies sourced_stats to the HTTP API', async () => {
+    const result = await client.callTool({ name: 'sourced_stats', arguments: {} });
     expect(JSON.parse(textOf(result)).documents).toBe(7);
   });
 });

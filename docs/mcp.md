@@ -1,11 +1,11 @@
-# Beacon MCP server
+# Sourced MCP server
 
-`beacon-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
+`sourced-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server
 (built on the open-source `@modelcontextprotocol/sdk`) that exposes the number-plate
 checker and the search index as tools for Claude and other MCP clients.
 
-It speaks MCP over **stdio**. The plate tools run in-process; the `beacon_*` tools
-call a running Beacon Search HTTP API (so they share one index file with no
+It speaks MCP over **stdio**. The plate tools run in-process; the `sourced_*` tools
+call a running Sourced HTTP API (so they share one index file with no
 concurrent-writer races).
 
 ## Tools
@@ -19,19 +19,19 @@ concurrent-writer races).
 | `mot_history`           | Full MOT test history, mileage, defects                              | `MOT_CLIENT_ID` / `MOT_CLIENT_SECRET` / `MOT_API_KEY` / `MOT_TOKEN_URL` |
 | `recon_target`          | Passive recon on a domain / IP / URL (see [recon.md](recon.md))      | —                                                                      |
 | `geolocate_ip`          | Country/region/city/ASN/ISP for a public IP                          | —                                                                      |
-| `beacon_search`         | Full-text search the index                                           | a running `beacon serve`                                                |
-| `beacon_index_document` | Add/replace a document                                               | a running `beacon serve`                                                |
-| `beacon_stats`          | Index statistics                                                     | a running `beacon serve`                                                |
+| `sourced_search`         | Full-text search the index                                           | a running `sourced serve`                                                |
+| `sourced_index_document` | Add/replace a document                                               | a running `sourced serve`                                                |
+| `sourced_stats`          | Index statistics                                                     | a running `sourced serve`                                                |
 
 ## Run it
 
 ```bash
 npm run build
-node dist/mcp/index.js           # or: npx beacon-mcp   (after npm link / global install)
+node dist/mcp/index.js           # or: npx sourced-mcp   (after npm link / global install)
 ```
 
 Environment (all optional — see [`.env.example`](../.env.example)):
-`BEACON_API_URL`, `DVLA_VES_API_KEY`, `MOT_CLIENT_ID`, `MOT_CLIENT_SECRET`,
+`SOURCED_API_URL`, `DVLA_VES_API_KEY`, `MOT_CLIENT_ID`, `MOT_CLIENT_SECRET`,
 `MOT_API_KEY`, `MOT_TOKEN_URL`. A `.env` file is auto-loaded.
 
 ## Connect it
@@ -39,10 +39,10 @@ Environment (all optional — see [`.env.example`](../.env.example)):
 ### Claude Code
 
 This repo already ships a project-scoped [`.mcp.json`](../.mcp.json). From the repo
-root just run `claude` and approve the `beacon-search` server, or add it explicitly:
+root just run `claude` and approve the `sourced` server, or add it explicitly:
 
 ```bash
-claude mcp add beacon-search -- node dist/mcp/index.js
+claude mcp add sourced -- node dist/mcp/index.js
 ```
 
 ### Claude Desktop
@@ -52,10 +52,10 @@ Add to `claude_desktop_config.json`:
 ```jsonc
 {
   "mcpServers": {
-    "beacon-search": {
+    "sourced": {
       "command": "node",
-      "args": ["/absolute/path/to/abeaconsearch/dist/mcp/index.js"],
-      "env": { "BEACON_API_URL": "http://127.0.0.1:7700" },
+      "args": ["/absolute/path/to/sourced/dist/mcp/index.js"],
+      "env": { "SOURCED_API_URL": "http://127.0.0.1:7700" },
     },
   },
 }
@@ -77,4 +77,4 @@ claude mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem "$PW
 ```
 
 Then Claude can, in one session: fetch a page, extract registrations, call
-`check_number_plate` on each, and `beacon_index_document` the results.
+`check_number_plate` on each, and `sourced_index_document` the results.

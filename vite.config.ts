@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const apiTarget = process.env.BEACON_DEV_API_URL ?? 'http://localhost:7700';
+const apiTarget = process.env.SOURCED_DEV_API_URL ?? 'http://localhost:7700';
 
 export default defineConfig({
   root: fileURLToPath(new URL('./web', import.meta.url)),

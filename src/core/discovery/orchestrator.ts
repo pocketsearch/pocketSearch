@@ -496,7 +496,7 @@ export class Orchestrator {
         const parsed = new URL(url);
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
         if (!this.deps.allowPrivateHosts && (await hostIsPrivate(parsed.hostname))) continue;
-        const ua = this.deps.userAgent ?? 'BeaconSearchBot/1.0';
+        const ua = this.deps.userAgent ?? 'SourcedBot/1.0';
         const robots = await fetchRobots(parsed.origin, ua, this.deps.fetchImpl ?? fetch, 6000);
         if (!robots.isAllowed(parsed.pathname)) continue;
         const fetched = await fetchHtml(url, {

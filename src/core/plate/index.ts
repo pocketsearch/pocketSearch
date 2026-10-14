@@ -40,7 +40,7 @@ export function createPlateChecker(
   });
 }
 
-/** Render a completed check as a searchable document for the Beacon index. */
+/** Render a completed check as a searchable document for the Sourced index. */
 export function plateCheckToDocument(check: PlateCheck): DocumentInput {
   const lines = [
     `Registration: ${check.formatted}`,

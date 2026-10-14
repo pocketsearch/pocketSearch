@@ -39,8 +39,8 @@ function fail(message: string): ToolText {
 }
 
 /**
- * Build the Beacon MCP server: number-plate tools (in-process) plus search-index
- * tools that proxy to a running Beacon Search HTTP API.
+ * Build the Sourced MCP server: number-plate tools (in-process) plus search-index
+ * tools that proxy to a running Sourced HTTP API.
  */
 export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   const { config, beaconApiUrl, version, fetchImpl } = options;
@@ -51,13 +51,13 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   const beacon = new BeaconClient(beaconApiUrl, fetchImpl);
 
   const server = new McpServer(
-    { name: 'beacon-search', version },
+    { name: 'sourced', version },
     {
       instructions:
         'Tools for UK number-plate analysis (offline format/age/region plus optional ' +
         'DVLA and DVSA lookups), passive reconnaissance on a domain / IP / URL (DNS, ' +
         'RDAP/WHOIS, TLS, security headers, tech fingerprint, robots, crt.sh subdomains, ' +
-        'IP geolocation), and searching / adding documents in a running Beacon Search instance.',
+        'IP geolocation), and searching / adding documents in a running Sourced instance.',
     },
   );
 
@@ -233,10 +233,10 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   );
 
   server.registerTool(
-    'beacon_search',
+    'sourced_search',
     {
-      title: 'Search the Beacon index',
-      description: 'Full-text search against a running Beacon Search instance.',
+      title: 'Search the Sourced index',
+      description: 'Full-text search against a running Sourced instance.',
       inputSchema: {
         query: z.string().describe('Search query (blank returns the newest documents)'),
         limit: z.number().int().min(1).max(50).optional(),
@@ -261,10 +261,10 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   );
 
   server.registerTool(
-    'beacon_index_document',
+    'sourced_index_document',
     {
-      title: 'Add a document to the Beacon index',
-      description: 'Create or replace a document in a running Beacon Search instance.',
+      title: 'Add a document to the Sourced index',
+      description: 'Create or replace a document in a running Sourced instance.',
       inputSchema: {
         title: z.string().min(1),
         body: z.string().default(''),
@@ -283,10 +283,10 @@ export function buildMcpServer(options: BuildMcpServerOptions): McpServer {
   );
 
   server.registerTool(
-    'beacon_stats',
+    'sourced_stats',
     {
-      title: 'Beacon index statistics',
-      description: 'Document counts, top tags and sources from a running Beacon Search instance.',
+      title: 'Sourced index statistics',
+      description: 'Document counts, top tags and sources from a running Sourced instance.',
       inputSchema: {},
     },
     async () => {

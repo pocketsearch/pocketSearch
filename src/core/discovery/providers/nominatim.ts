@@ -49,7 +49,7 @@ export class NominatimProvider implements SearchProvider {
       timeoutMs: this.timeoutMs,
       signal: ctx.signal,
       fetchImpl: this.opts.fetchImpl,
-      headers: { 'user-agent': 'BeaconSearchBot/1.0 (discovery; +https://github.com/pocketsearch/pocketSearch)' },
+      headers: { 'user-agent': 'SourcedBot/1.0 (discovery; +https://github.com/pocketsearch/pocketSearch)' },
     });
 
     if (!PLACE_HINTS.test(query) && (rows.length === 0 || (rows[0]?.importance ?? 0) < 0.4)) {

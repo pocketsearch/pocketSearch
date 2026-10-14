@@ -7,10 +7,10 @@ it is explicit about where every statement comes from and how far to trust it.
 - Web UI: the Search tab auto-runs an answer for question-like queries
   (`?` present, starts with who/what/how/…, or ≥ 4 words). Other queries get a
   "weave an answer" button. Disable the auto behaviour with
-  `BEACON_ANSWER_AUTO=false`.
+  `SOURCED_ANSWER_AUTO=false`.
 - API: `GET /api/answer?q=<query>&fresh=<bool>`. `fresh=true` bypasses the
   5-minute in-process answer cache.
-- Off switch: `BEACON_ANSWER_ENABLED=false` removes the route and hides the card.
+- Off switch: `SOURCED_ANSWER_ENABLED=false` removes the route and hides the card.
 
 ## Pipeline
 
@@ -25,12 +25,12 @@ it is explicit about where every statement comes from and how far to trust it.
    and no sources.
 1. **Retrieve** (`src/core/answer/retrieval.ts`)
    - Local index: an OR-combined search, top _n_ documents.
-   - Live web: if `BEACON_ANSWER_WEB_SEARCH` is `brave` / `tavily` / `searxng`
+   - Live web: if `SOURCED_ANSWER_WEB_SEARCH` is `brave` / `tavily` / `searxng`
      and its credential is set, the query is run against that provider and the
      top results are fetched — each URL is checked against the SSRF guard
      (`hostIsPrivate`) and `robots.txt`, then fetched with a timeout and reduced
      to readable text. Unreachable / blocked URLs become `warnings`.
-   - Sources are de-duplicated by URL and capped at `BEACON_ANSWER_MAX_SOURCES`.
+   - Sources are de-duplicated by URL and capped at `SOURCED_ANSWER_MAX_SOURCES`.
 2. **Ground** (`src/core/answer/extract.ts`) — each source is split into
    sentences; the sentences that best cover the query terms (weighted by source
    trust) are selected and kept tied to their source id. Index sources that
@@ -39,7 +39,7 @@ it is explicit about where every statement comes from and how far to trust it.
    short excerpt per source are handed to an LLM with a strict instruction to
    use only those extracts and to cite every sentence. Providers are tried in
    order: Anthropic (`ANTHROPIC_API_KEY`), then any OpenAI-compatible endpoint
-   (`OPENAI_API_KEY` + `BEACON_ANSWER_OPENAI_MODEL`). If none is configured, or
+   (`OPENAI_API_KEY` + `SOURCED_ANSWER_OPENAI_MODEL`). If none is configured, or
    all fail, the deterministic weave from step 2 is used and `synthesizer` is
    `extractive`.
 4. **Verify** (`src/core/answer/answer-service.ts`) — the woven prose is split
@@ -53,7 +53,7 @@ Assigned from the source URL (`src/core/answer/trust.ts`):
 
 | Tier          | What it means                                                                                                                                  |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `official`    | `.gov` / `.gov.uk` / `.mil` / `.int` / `.edu` / `.ac.uk` / `nhs.uk` / EU / UN / WHO / …, or a domain listed in `BEACON_ANSWER_TRUSTED_DOMAINS` |
+| `official`    | `.gov` / `.gov.uk` / `.mil` / `.int` / `.edu` / `.ac.uk` / `nhs.uk` / EU / UN / WHO / …, or a domain listed in `SOURCED_ANSWER_TRUSTED_DOMAINS` |
 | `established` | curated encyclopedias, wire services, standards bodies, peer-reviewed publishers (Wikipedia, Reuters, Nature, W3C, IETF, …)                    |
 | `community`   | any other page that was fetched successfully or is in the index with a URL                                                                     |
 | `unverified`  | no URL, the page could not be fetched, or an LLM-only statement                                                                                |

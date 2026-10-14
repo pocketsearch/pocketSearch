@@ -35,7 +35,7 @@ export class WikipediaProvider implements SearchProvider {
       timeoutMs: this.timeoutMs,
       signal: ctx.signal,
       fetchImpl: this.opts.fetchImpl,
-      headers: { 'user-agent': 'BeaconSearchBot/1.0 (discovery)' },
+      headers: { 'user-agent': 'SourcedBot/1.0 (discovery)' },
     });
     const rows = body.query?.search ?? [];
     return rows.map((row) => {

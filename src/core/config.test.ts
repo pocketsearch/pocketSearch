@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
 
 const TOUCHED = [
-  'BEACON_PORT',
+  'SOURCED_PORT',
   'PORT',
-  'BEACON_DVLA_VES_API_KEY',
+  'SOURCED_DVLA_VES_API_KEY',
   'DVLA_VES_API_KEY',
-  'BEACON_PLATE_TIMEOUT_MS',
-  'BEACON_HOST',
+  'SOURCED_PLATE_TIMEOUT_MS',
+  'SOURCED_HOST',
 ];
 
 describe('loadConfig', () => {
@@ -33,14 +33,14 @@ describe('loadConfig', () => {
   });
 
   it('trims string env values', () => {
-    process.env.BEACON_HOST = '  127.0.0.1  ';
+    process.env.SOURCED_HOST = '  127.0.0.1  ';
     expect(loadConfig().host).toBe('127.0.0.1');
   });
 
-  it('accepts plate provider vars with or without the BEACON_ prefix', () => {
+  it('accepts plate provider vars with or without the SOURCED_ prefix', () => {
     process.env.DVLA_VES_API_KEY = 'bare-key';
     expect(loadConfig().plate.dvlaVesApiKey).toBe('bare-key');
-    process.env.BEACON_DVLA_VES_API_KEY = 'prefixed-key';
+    process.env.SOURCED_DVLA_VES_API_KEY = 'prefixed-key';
     expect(loadConfig().plate.dvlaVesApiKey).toBe('prefixed-key');
   });
 

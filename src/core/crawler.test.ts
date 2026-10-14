@@ -33,7 +33,7 @@ const baseOptions = {
   maxPages: 10,
   sameOriginOnly: true,
   tags: ['test'],
-  userAgent: 'BeaconSearchBot/1.0',
+  userAgent: 'SourcedBot/1.0',
   timeoutMs: 1000,
   delayMs: 0,
   concurrency: 2,

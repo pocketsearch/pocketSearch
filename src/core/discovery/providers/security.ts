@@ -130,7 +130,7 @@ export class GitHubAdvisoriesProvider implements SearchProvider {
         fetchImpl: this.opts.fetchImpl,
         headers: {
           accept: 'application/vnd.github+json',
-          'user-agent': 'BeaconSearchBot/1.0 (discovery)',
+          'user-agent': 'SourcedBot/1.0 (discovery)',
           'x-github-api-version': '2022-11-28',
         },
       },
